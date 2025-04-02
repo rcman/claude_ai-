@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open-World Survival Game</title>
+    <style>
+        /* --- Existing CSS --- */
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #ui-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+        }
+        .quick-slot {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #fff;
+            border-radius: 5px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative; /* Added for positioning context */
+        }
+        .slot-key {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            font-size: 12px;
+            color: #aaa;
+        }
+        .slot-count {
+            position: absolute;
+            bottom: 2px;
+            right: 5px;
+            font-size: 14px;
+        }
+        .slot-icon {
+            width: 40px;
+            height: 40px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            /* Added placeholder style if assets missing */
+            background-color: rgba(255, 255, 255, 0.1);
+            display: flex; /* For text placeholder */
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            overflow: hidden;
+        }
+        #inventory-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            height: 400px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 2px solid #555;
+            border-radius: 10px;
+            display: none;
+            flex-direction: column;
+            padding: 20px;
+            color: white;
+        }
+        #inventory-slots {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 10px;
+            flex-grow: 1;
+        }
+        .inventory-slot {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid #555;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        #stats-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            padding: 10px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .stat-bar {
+            width: 150px;
+            height: 15px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid #555;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .stat-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        .health-fill { background-color: #e74c3c; }
+        .hunger-fill { background-color: #f39c12; }
+        .thirst-fill { background-color: #3498db; }
+        #interaction-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -70px);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        #message-log {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .message {
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            animation: fadeOut 5s forwards;
+        }
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            80% { opacity: 1; } /* Stay visible longer */
+            100% { opacity: 0; }
+        }
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            z-index: 1000;
+        }
+        #error {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            z-index: 1000;
+            padding: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading game resources...</div>
+    <div id="error">
+        <h2>Error Loading Game</h2>
+        <p>Could not load required resources. Please check your internet connection and try again.</p>
+        <button onclick="location.reload()">Reload</button>
+    </div>
+
+    <div id="stats-panel">
+        <div>Health</div>
+        <div class="stat-bar"><div class="stat-fill health-fill" style="width: 100%;"></div></div>
+        <div>Hunger</div>
+        <div class="stat-bar"><div class="stat-fill hunger-fill" style="width: 100%;"></div></div>
+        <div>Thirst</div>
+        <div class="stat-bar"><div class="stat-fill thirst-fill" style="width: 100%;"></div></div>
+    </div>
+
+    <div id="ui-container">
+        <div class="quick-slot" id="slot-1"><span class="slot-key">1</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+        <div class="quick-slot" id="slot-2"><span class="slot-key">2</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+        <div class="quick-slot" id="slot-3"><span class="slot-key">3</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+        <div class="quick-slot" id="slot-4"><span class="slot-key">4</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+        <div class="quick-slot" id="slot-5"><span class="slot-key">5</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+        <div class="quick-slot" id="slot-6"><span class="slot-key">6</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+    </div>
+
+    <div id="inventory-panel">
+        <h2>Inventory</h2>
+        <div id="inventory-slots"></div>
+    </div>
+
+    <div id="interaction-text"></div>
+    <div id="message-log"></div>
+    
+    <script>
+        // Global variables to hold our dependencies
+        let THREE;
+        let OrbitControls;
+        let loadingComplete = false;
+        let loadingFailed = false;
+        let loadingTimeout;
+        
+        // Set a timeout to detect if loading is taking too long
+        loadingTimeout = setTimeout(() => {
+            if (!loadingComplete && !loadingFailed) {
+                loadingFailed = true;
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'flex';
+                console.error('Loading timed out. Something went wrong.');
+            }
+        }, 10000); // 10 seconds timeout
+        
+        // Function to load scripts in sequence with proper error handling
+        function loadScript(url, callback) {
+            console.log(`Loading: ${url}`);
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.src = url;
+            script.onload = callback;
+            script.onerror = function() {
+                console.error(`Failed to load: ${url}`);
+                const nextUrl = this.getAttribute('data-fallback');
+                if (nextUrl) {
+                    console.log(`Trying fallback: ${nextUrl}`);
+                    loadScript(nextUrl, callback);
+                } else {
+                    loadingFailed = true;
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('error').style.display = 'flex';
+                }
+            };
+            
+            // Add fallback URL if provided
+            if (arguments.length > 2 && arguments[2]) {
+                script.setAttribute('data-fallback', arguments[2]);
+            }
+            
+            document.head.appendChild(script);
+        }
+        
+        // First load Three.js, then load OrbitControls, then initialize the game
+        function startLoading() {
+            // First try to load Three.js
+            loadScript(
+                'https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js', 
+                function() {
+                    // Now THREE is available globally
+                    if (window.THREE) {
+                        THREE = window.THREE;
+                        console.log('Three.js loaded successfully');
+                        
+                        // Now load OrbitControls (which depends on THREE)
+                        loadScript(
+                            'https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js',
+                            function() {
+                                // OrbitControls should now be available
+                                if (window.THREE.OrbitControls) {
+                                    OrbitControls = window.THREE.OrbitControls;
+                                    console.log('OrbitControls loaded successfully');
+                                    
+                                    // Loading complete, start the game
+                                    loadingComplete = true;
+                                    clearTimeout(loadingTimeout);
+                                    document.getElementById('loading').style.display = 'none';
+                                    initGame();
+                                } else {
+                                    console.error('OrbitControls not defined after loading');
+                                    // Try to start without OrbitControls
+                                    loadingComplete = true;
+                                    clearTimeout(loadingTimeout);
+                                    document.getElementById('loading').style.display = 'none';
+                                    initGame();
+                                }
+                            },
+                            'https://cdnjs.cloudflare.com/ajax/libs/three.js/132/examples/js/controls/OrbitControls.js'
+                        );
+                    } else {
+                        console.error('THREE not defined after loading');
+                        loadingFailed = true;
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('error').style.display = 'flex';
+                    }
+                },
+                'https://cdnjs.cloudflare.com/ajax/libs/three.js/132/three.min.js'
+            );
+        }
+
+        // Global game variables
+        let scene, camera, renderer, controls, player;
+        let ambientLight, directionalLight;
+        let ground;
+        let interactionRaycaster;
+        let clock;
+
+        // --- Game state ---
+        const state = {
+            player: {
+                health: 100,
+                hunger: 100,
+                thirst: 100,
+                position: new THREE.Vector3(0, 1, 0), // Will be properly initialized after THREE is loaded
+                isDead: false
+            },
+            inventory: {
+                items: [],
+                maxSlots: 32,
+                selectedSlot: 0
+            },
+            world: {
+                time: 0,
+                entities: [] // This will store references to interactable meshes
+            },
+            ui: {
+                inventoryOpen: false
+            }
+        };
+
+        // --- Item Database ---
+        const itemDatabase = {
+            'wood': { id: 'wood', name: 'Wood', icon: 'wood-icon', stackable: true, maxStack: 50, type: 'resource' },
+            'stone': { id: 'stone', name: 'Stone', icon: 'stone-icon', stackable: true, maxStack: 50, type: 'resource' },
+            'metal_ore': { id: 'metal_ore', name: 'Metal Ore', icon: 'metal-ore-icon', stackable: true, maxStack: 20, type: 'resource'},
+            'meat': { id: 'meat', name: 'Raw Meat', icon: 'meat-icon', stackable: true, maxStack: 10, type: 'food', hungerRestore: 20, useFunction: 'eatFood' },
+            'axe': { id: 'axe', name: 'Axe', icon: 'axe-icon', stackable: false, type: 'tool', durability: 100, damage: 15, useFunction: 'chopTree' },
+            'knife': { id: 'knife', name: 'Knife', icon: 'knife-icon', stackable: false, type: 'weapon', durability: 100, damage: 10, useFunction: 'attack' },
+            'pickaxe': { id: 'pickaxe', name: 'Pickaxe', icon: 'pickaxe-icon', stackable: false, type: 'tool', durability: 100, useFunction: 'mineResource' },
+            'storage_box': { id: 'storage_box', name: 'Storage Box', icon: 'storage-box-icon', stackable: true, maxStack: 5, type: 'placeable', useFunction: 'placeStorageBox' }
+        };
+
+        // --- Entity Types ---
+        const entityTypes = {
+            'tree': { health: 100, respawnTime: 300 },
+            'rock': { health: 150, respawnTime: 400, resources: [
+                { id: 'stone', count: [3, 7] }
+            ]},
+            'metal_node': { health: 200, respawnTime: 500, resources: [
+                { id: 'stone', count: [1, 3] },
+                { id: 'metal_ore', count: [2, 4] }
+            ]},
+            'animal_deer': { health: 60, speed: 4, respawnTime: 350, resources: [
+                { id: 'meat', count: [2, 4] }
+            ]},
+            'animal_wolf': { health: 80, speed: 5, respawnTime: 400, 
+                             hostility: 'aggressive', detectionRange: 10, attackDamage: 15,
+                             resources: [{ id: 'meat', count: [1, 3] }] },
+            'barrel': { health: 1, respawnTime: 600, 
+                         lootTable: [
+                           { id: 'wood', chance: 0.5, count: [1, 5] },
+                           { id: 'stone', chance: 0.3, count: [1, 3] },
+                           { id: 'metal_ore', chance: 0.1, count: [1, 2] }
+                         ] }
+        };
+
+        // Input handling
+        const moveSpeed = 5; // Units per second
+        const keysPressed = {};
+
+        // --- Helper Functions ---
+        function addItemToInventory(itemData) {
+            // Find item definition from database if only ID is provided
+            const itemDefinition = typeof itemData === 'string' ? itemDatabase[itemData] : itemData;
+            if (!itemDefinition) {
+                console.error("Attempted to add unknown item:", itemData);
+                return false;
+            }
+            const itemToAdd = { ...itemDefinition, count: itemData.count || 1 };
+
+            // Check if item is stackable and already exists
+            if (itemToAdd.stackable) {
+                const maxStack = itemDefinition.maxStack || 50; // Default max stack
+                // Find existing stacks with space
+                for (let i = 0; i < state.inventory.items.length; i++) {
+                    const existingItem = state.inventory.items[i];
+                    if (existingItem.id === itemToAdd.id && existingItem.count < maxStack) {
+                        const canAdd = maxStack - existingItem.count;
+                        const adding = Math.min(itemToAdd.count, canAdd);
+                        existingItem.count += adding;
+                        itemToAdd.count -= adding;
+                        if (itemToAdd.count <= 0) {
+                            updateInventoryUI();
+                            updateQuickSlots();
+                            return true; // Added whole amount to existing stack(s)
+                        }
+                    }
+                }
+                // If some count remains, fall through to add to a new slot
+            }
+
+            // Add new item stack if there's space and count > 0
+            if (itemToAdd.count > 0 && state.inventory.items.length < state.inventory.maxSlots) {
+                state.inventory.items.push(itemToAdd);
+                updateInventoryUI();
+                updateQuickSlots();
+                return true;
+            } else if (itemToAdd.count > 0) {
+                showMessage("Inventory is full!");
+                return false; // Inventory full
+            }
+            return false; // Should not happen if count was already 0
+        }
+
+        function showMessage(text) {
+            const messageLog = document.getElementById('message-log');
+            const message = document.createElement('div');
+            message.className = 'message';
+            message.textContent = text;
+            messageLog.appendChild(message);
+            setTimeout(() => {
+                message.remove();
+            }, 5000); // Remove after animation completes
+        }
+        
+        function toggleInventory() {
+            state.ui.inventoryOpen = !state.ui.inventoryOpen;
+            const inventoryPanel = document.getElementById('inventory-panel');
+            inventoryPanel.style.display = state.ui.inventoryOpen ? 'flex' : 'none';
+            
+            if (state.ui.inventoryOpen) {
+                // Update inventory when opening
+                updateInventoryUI();
+            }
+        }
+
+        function updateInventoryUI() {
+            const inventorySlots = document.getElementById('inventory-slots');
+            inventorySlots.innerHTML = '';
+
+            for (let i = 0; i < state.inventory.maxSlots; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'inventory-slot';
+
+                if (i < state.inventory.items.length) {
+                    const item = state.inventory.items[i];
+                    if (!item) continue; // Safety check
+
+                    const icon = document.createElement('div');
+                    icon.className = 'slot-icon';
+                    // Check if icon exists, provide fallback text
+                    if (item.icon) {
+                        // !! IMPORTANT: Make sure you have these images in an 'assets' folder !!
+                        icon.style.backgroundImage = `url('assets/${item.icon}.png')`;
+                        icon.style.backgroundColor = 'transparent'; // Remove placeholder color if image loads
+                    } else {
+                        icon.textContent = item.name.substring(0, 3); // Show first 3 letters as placeholder
+                    }
+
+                    if (item.stackable && item.count > 1) {
+                        const count = document.createElement('span');
+                        count.className = 'slot-count';
+                        count.textContent = item.count;
+                        slot.appendChild(count);
+                    }
+
+                    slot.title = `${item.name}${item.count > 1 ? ' (' + item.count + ')' : ''}`;
+                    slot.appendChild(icon);
+
+                    // TODO: Implement Drag and Drop Listeners Here
+                    slot.setAttribute('draggable', 'true');
+                    slot.dataset.itemIndex = i;
+                    // slot.addEventListener('dragstart', handleDragStart);
+                } else {
+                    // Add drop listeners to empty slots too
+                    // slot.addEventListener('dragover', handleDragOver);
+                    // slot.addEventListener('drop', handleDrop);
+                }
+
+                inventorySlots.appendChild(slot);
+            }
+        }
+
+        function updateQuickSlots() {
+            for (let i = 1; i <= 6; i++) {
+                const slotElement = document.getElementById(`slot-${i}`);
+                const slotIndex = i - 1;
+                const iconElement = slotElement.querySelector('.slot-icon');
+                const countElement = slotElement.querySelector('.slot-count');
+
+                iconElement.style.backgroundImage = '';
+                iconElement.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'; // Reset placeholder
+                iconElement.textContent = ''; // Clear text placeholder
+                countElement.textContent = '';
+
+                if (slotIndex < state.inventory.items.length) {
+                    const item = state.inventory.items[slotIndex];
+                    if(item && item.icon) { // Check if item exists
+                        iconElement.style.backgroundImage = `url('assets/${item.icon}.png')`;
+                        iconElement.style.backgroundColor = 'transparent';
+                    } else if (item) {
+                        iconElement.textContent = item.name.substring(0, 3);
+                    }
+
+                    if (item && item.stackable && item.count > 1) {
+                        countElement.textContent = item.count;
+                    }
+                }
+
+                if (slotIndex === state.inventory.selectedSlot) {
+                    slotElement.style.borderColor = '#f1c40f'; // Gold for selected
+                } else {
+                    slotElement.style.borderColor = '#fff';
+                }
+            }
+        }
+
+        // --- Gameplay Functions ---
+        function removeEntityFromState(entityToRemove) {
+            const index = state.world.entities.indexOf(entityToRemove);
+            if (index > -1) {
+                state.world.entities.splice(index, 1);
+            } else {
+                console.warn("Tried to remove entity not found in state.world.entities:", entityToRemove);
+            }
+        }
+
+        function chopTree(tree) {
+            // Tool durability decrease would go here
+            tree.health -= 20; // Example damage
+            showHitEffect(tree.position);
+
+            if (tree.health <= 0) {
+                animateTreeFalling(tree);
+
+                const woodAmount = Math.floor(Math.random() * 6) + 5; // 5-10 wood
+                addItemToInventory({ id: 'wood', count: woodAmount }); // Use ID, let addItemToInventory find details
+                showMessage(`+${woodAmount} Wood`);
+
+                // Remove entity from scene and state before respawn timer
+                scene.remove(tree);
+                removeEntityFromState(tree); // Remove from state array
+
+                // Schedule respawn
+                const respawnTime = entityTypes['tree'].respawnTime || 300;
+                setTimeout(() => {
+                    // Respawn needs original position; store it or pass it
+                    // For simplicity, let's respawn near original spot for now
+                    spawnEntity('tree', tree.position.x + (Math.random()-0.5)*2, tree.position.z + (Math.random()-0.5)*2);
+                }, respawnTime * 1000);
+            }
+        }
+
+        function mineResource(resource) {
+            // Tool durability decrease would go here
+            const damage = 15; // Example damage for pickaxe
+            resource.health -= damage;
+            showHitEffect(resource.position);
+
+            if (resource.health <= 0) {
+                const entityData = entityTypes[resource.userData.type]; // Access type via userData
+                if (!entityData || !entityData.resources) {
+                    console.error("Mining broken resource or missing type data:", resource.userData.type);
+                    return;
+                }
+
+                entityData.resources.forEach(resourceData => {
+                    const itemDef = itemDatabase[resourceData.id];
+                    if (!itemDef) return; // Skip if item doesn't exist
+
+                    const min = resourceData.count[0];
+                    const max = resourceData.count[1];
+                    const amount = Math.floor(Math.random() * (max - min + 1)) + min;
+
+                    if (amount > 0) {
+                        addItemToInventory({ id: resourceData.id, count: amount });
+                        showMessage(`+${amount} ${itemDef.name}`);
+                    }
+                });
+
+                // Remove resource from scene and state
+                scene.remove(resource);
+                removeEntityFromState(resource);
+
+                // Schedule respawn
+                const respawnTime = entityData.respawnTime || 400;
+                const originalPos = resource.position.clone(); // Store position
+                setTimeout(() => {
+                    spawnEntity(resource.userData.type, originalPos.x, originalPos.z);
+                }, respawnTime * 1000);
+            }
+        }
+
+        function attack(target) {
+            // Tool durability decrease would go here
+            const selectedItem = state.inventory.items[state.inventory.selectedSlot];
+            const damage = selectedItem?.damage || 5; // Use item damage or default unarmed damage
+
+            if (!target.userData || typeof target.userData.health === 'undefined') {
+                console.warn("Attacked target with no health data:", target);
+                return;
+            }
+
+            target.userData.health -= damage;
+            showHitEffect(target.position);
+            showMessage(`Hit ${target.userData.name || target.userData.type} for ${damage} damage (${target.userData.health} left)`);
+
+            if (target.userData.health <= 0) {
+                const entityData = entityTypes[target.userData.type];
+                if (!entityData) return;
+
+                // Drop resources
+                if (entityData.resources) {
+                    entityData.resources.forEach(resourceData => {
+                        const itemDef = itemDatabase[resourceData.id];
+                        if (!itemDef) return;
+                        const min = resourceData.count[0];
+                        const max = resourceData.count[1];
+                        const amount = Math.floor(Math.random() * (max - min + 1)) + min;
+                        if (amount > 0) {
+                            addItemToInventory({ id: resourceData.id, count: amount });
+                            showMessage(`+${amount} ${itemDef.name}`);
+                        }
+                    });
+                }
+
+                // Remove target from scene and state
+                scene.remove(target);
+                removeEntityFromState(target);
+
+                // Schedule respawn
+                const respawnTime = entityData.respawnTime || 350;
+                const originalPos = target.position.clone(); // Store position
+                setTimeout(() => {
+                    spawnEntity(target.userData.type,
+                                Math.random() * 80 - 40, // Random respawn for animals? Or use originalPos?
+                                Math.random() * 80 - 40);
+                }, respawnTime * 1000);
+            } else {
+                // Aggro logic (if target survives)
+                const entityData = entityTypes[target.userData.type];
+                if (entityData && entityData.hostility === 'aggressive' && target.aiState) {
+                    if (target.aiState.state !== 'chase') { // Make it chase if not already
+                        target.aiState.state = 'chase';
+                        showMessage(`${target.userData.name} is now hostile!`);
+                    }
+                    // Note: Actual attack back happens in updateAI based on chase state
+                }
+            }
+        }
+
+        function eatFood() {
+            const selectedItemIndex = state.inventory.selectedSlot;
+            const item = state.inventory.items[selectedItemIndex];
+
+            if (!item || item.type !== 'food' || !item.hungerRestore) {
+                showMessage("Select a food item to eat.");
+                return;
+            }
+
+            const hungerRestore = item.hungerRestore;
+            state.player.hunger = Math.min(100, state.player.hunger + hungerRestore);
+
+            item.count--;
+            if (item.count <= 0) {
+                state.inventory.items.splice(selectedItemIndex, 1);
+                // Maybe select the next slot or slot 0 after consuming?
+                // state.inventory.selectedSlot = Math.min(state.inventory.selectedSlot, state.inventory.items.length - 1);
+            }
+
+            updateStatusBars();
+            updateInventoryUI();
+            updateQuickSlots();
+
+            showMessage(`Ate ${item.name}, +${hungerRestore} hunger`);
+        }
+
+        function placeStorageBox() { 
+            // Implementation would go here
+            console.log("Place storage box function called");
+        }
+        
+        function createStorageBox(position) {
+            // Implementation would go here
+            console.log("Create storage box at position:", position);
+        }
+        
+        function animateTreeFalling(tree) {
+            // Simple animation for tree falling
+            const startRotation = tree.rotation.z;
+            const fallDirection = Math.random() > 0.5 ? 1 : -1; // Random fall direction
+            const fallSpeed = 0.02;
+            const fallAmount = Math.PI / 2 * fallDirection; // 90 degrees
+            
+            const fallInterval = setInterval(() => {
+                tree.rotation.z += fallSpeed * fallDirection;
+                if (Math.abs(tree.rotation.z - startRotation) >= Math.abs(fallAmount)) {
+                    clearInterval(fallInterval);
+                }
+            }, 16); // ~60fps
+        }
+        
+        function showHitEffect(position) {
+            // Could create a particle effect or simple animation here
+            // For simplicity, just log to console
+            console.log("Hit effect at position:", position);
+        }
+        
+        function updateStatusBars() {
+            // Update the health, hunger, and thirst UI bars
+            document.querySelector('.health-fill').style.width = `${state.player.health}%`;
+            document.querySelector('.hunger-fill').style.width = `${state.player.hunger}%`;
+            document.querySelector('.thirst-fill').style.width = `${state.player.thirst}%`;
+        }
+        
+        function searchBarrel(barrel) {
+            if (!barrel.userData || !barrel.userData.lootTable) {
+                console.error("Barrel has no loot table:", barrel);
+                return;
+            }
+            
+            // Process each possible item in the loot table
+            barrel.userData.lootTable.forEach(lootEntry => {
+                // Random roll for this item
+                if (Math.random() <= lootEntry.chance) {
+                    // Calculate random amount within range
+                    const min = lootEntry.count[0];
+                    const max = lootEntry.count[1];
+                    const amount = Math.floor(Math.random() * (max - min + 1)) + min;
+                    
+                    if (amount > 0) {
+                        // Add to inventory
+                        addItemToInventory({ id: lootEntry.id, count: amount });
+                        showMessage(`Found ${amount} ${itemDatabase[lootEntry.id].name}`);
+                    }
+                }
+            });
+            
+            // Remove barrel from scene and state
+            scene.remove(barrel);
+            removeEntityFromState(barrel);
+
+            // Schedule respawn
+            const respawnTime = entityTypes['barrel'].respawnTime || 600;
+            const originalPos = barrel.position.clone(); // Store position
+            setTimeout(() => {
+                spawnEntity('barrel',
+                            Math.random() * 80 - 40, // Random respawn location
+                            Math.random() * 80 - 40);
+            }, respawnTime * 1000);
+        }
+        
+        function generateWorld() {
+            // Create some trees
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * 80 - 40; // -40 to 40
+                const z = Math.random() * 80 - 40; // -40 to 40
+                spawnEntity('tree', x, z);
+            }
+            
+            // Create some rocks
+            for (let i = 0; i < 15; i++) {
+                const x = Math.random() * 80 - 40;
+                const z = Math.random() * 80 - 40;
+                spawnEntity('rock', x, z);
+            }
+            
+            // Add some animals
+            for (let i = 0; i < 8; i++) {
+                const x = Math.random() * 80 - 40;
+                const z = Math.random() * 80 - 40;
+                spawnEntity('animal_deer', x, z);
+            }
+            
+            for (let i = 0; i < 5; i++) {
+                const x = Math.random() * 80 - 40;
+                const z = Math.random() * 80 - 40;
+                spawnEntity('animal_wolf', x, z);
+            }
+            
+            // Add some barrels
+            for (let i = 0; i < 10; i++) {
+                const x = Math.random() * 80 - 40;
+                const z = Math.random() * 80 - 40;
+                spawnEntity('barrel', x, z);
+            }
+        }
+        
+        function setupInventory() {
+            // Create slots in the inventory UI
+            const inventorySlots = document.getElementById('inventory-slots');
+            for (let i = 0; i < state.inventory.maxSlots; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'inventory-slot';
+                inventorySlots.appendChild(slot);
+            }
+        }
+        
+        // --- Interaction ---
+        function getInteractableObject() {
+            // Raycast from player forward
+            const playerDirection = new THREE.Vector3();
+            player.getWorldDirection(playerDirection); // Gets the local -Z direction in world space
+
+            // Ray starts slightly in front of player center to avoid hitting self
+            const rayOrigin = player.position.clone().add(playerDirection.multiplyScalar(0.6));
+            rayOrigin.y = player.position.y; // Keep ray horizontal for ground objects
+
+            interactionRaycaster.set(rayOrigin, playerDirection);
+
+            // Important: Only check against entities in our state list
+            const intersects = interactionRaycaster.intersectObjects(state.world.entities, true); // Check recursively for groups
+
+            if (intersects.length > 0) {
+                // Find the closest intersect object that has interactable userData
+                for (let i = 0; i < intersects.length; i++) {
+                    const intersect = intersects[i];
+                    // Traverse up to find the main object added to state.world.entities
+                    let mainObject = intersect.object;
+                    while (mainObject.parent && mainObject.parent !== scene) {
+                        // Check if parent is in the entities list (covers groups)
+                        if (state.world.entities.includes(mainObject.parent)) {
+                            mainObject = mainObject.parent;
+                            break;
+                        }
+                        mainObject = mainObject.parent; // Keep traversing up
+                    }
+
+                    // Now check this main object
+                    if (mainObject.userData?.interactable && intersect.distance < interactionDistance) {
+                        return mainObject; // Return the main interactable object (Mesh or Group)
+                    }
+                }
+            }
+            return null; // No interactable object found in range
+        }
+
+        function checkInteractions() {
+            const interactionText = document.getElementById('interaction-text');
+            const target = getInteractableObject(); // Use the helper function
+
+            if (target) {
+                interactionText.style.display = 'block';
+                let text = 'Press E to interact'; // Default text
+
+                // Customize text based on type
+                switch (target.userData.type) {
+                    case 'tree': text = 'Press E to chop'; break;
+                    case 'rock':
+                    case 'metal_node': text = 'Press E to mine'; break;
+                    case 'barrel': text = 'Press E to search'; break;
+                    case 'storage_box': text = 'Press E to open'; break;
+                    case 'animal_deer': text = 'Press E to attack Deer'; break;
+                    case 'animal_wolf': text = 'Press E to attack Wolf'; break;
+                }
+                // Add tool requirement info
+                if (target.userData.requiresTool) {
+                    const selectedItem = state.inventory.items[state.inventory.selectedSlot];
+                    if (!selectedItem || selectedItem.id !== target.userData.requiresTool) {
+                        text += ` (Requires ${target.userData.requiresTool})`;
+                    }
+                }
+
+                interactionText.textContent = text;
+                // Interaction key press is handled in 'keydown' event listener
+            } else {
+                interactionText.style.display = 'none';
+            }
+        }
+
+        function interactWithObject(target) {
+            if (!target || !target.userData) return; // Safety check
+
+            const selectedItem = state.inventory.items[state.inventory.selectedSlot];
+            const requiredTool = target.userData.requiresTool;
+
+            // Check tool requirement
+            if (requiredTool) {
+                if (!selectedItem || selectedItem.id !== requiredTool) {
+                    // Find the tool name from the database for a nicer message
+                    const toolName = itemDatabase[requiredTool]?.name || requiredTool;
+                    showMessage(`You need a ${toolName} to interact with this.`);
+                    return;
+                }
+                // TODO: Add durability loss for the tool here
+                // selectedItem.durability -= 1;
+                // if (selectedItem.durability <= 0) { /* handle broken tool */ }
+                // updateInventoryUI(); updateQuickSlots();
+            }
+
+            // Call the appropriate function based on type
+            if (target.userData.type === 'tree' && selectedItem?.id === 'axe') {
+                chopTree(target);
+            } else if ((target.userData.type === 'rock' || target.userData.type === 'metal_node') && selectedItem?.id === 'pickaxe') {
+                mineResource(target);
+            } else if (target.userData.type.startsWith('animal') && selectedItem?.type === 'weapon') {
+                attack(target);
+            } else if (target.userData.type === 'barrel') {
+                searchBarrel(target);
+            } else if (target.userData.type === 'storage_box') {
+                openStorageBox(target);
+            } else {
+                // Fallback or case where no specific tool needed but interaction exists
+                if (!requiredTool) { // If no tool was required, but we got here, maybe a default action?
+                    showMessage(`Interacting with ${target.userData.type || 'object'}`);
+                } else {
+                    // This case should ideally be caught by the tool check above
+                    showMessage(`Cannot interact with ${target.userData.type || 'object'}`);
+                }
+            }
+        }
+
+        function openStorageBox(box) {
+            // Placeholder function - would implement storage box UI
+            showMessage("Opening storage box...");
+        }
+        
+        // --- AI Update ---
+        function updateAI(deltaSeconds) { // Pass delta in seconds
+            state.world.entities.forEach(entity => {
+                if (!entity.aiState || !entity.userData) return;
+
+                const speed = (entity.userData.speed || 3) * deltaSeconds; // Use speed from userData
+
+                // Simplified AI state machine
+                switch (entity.aiState.state) {
+                    case 'idle':
+                        entity.aiState.idleTime += deltaSeconds * 1000; // idleTime seems to be in ms
+                        if (entity.aiState.idleTime > entity.aiState.maxIdleTime) {
+                            entity.aiState.state = 'wander';
+                            entity.aiState.idleTime = 0;
+                            const angle = Math.random() * Math.PI * 2;
+                            const distance = Math.random() * 10 + 5;
+                            entity.aiState.targetPosition = new THREE.Vector3(
+                                entity.position.x + Math.cos(angle) * distance,
+                                entity.position.y, // Maintain Y level
+                                entity.position.z + Math.sin(angle) * distance
+                            );
+                        }
+                        // Aggro check
+                        if (entity.userData.hostility === 'aggressive') {
+                            const distanceToPlayer = entity.position.distanceTo(player.position);
+                            if (distanceToPlayer < entity.userData.detectionRange) {
+                                entity.aiState.state = 'chase';
+                            }
+                        }
+                        break;
+
+                    case 'wander':
+                        if (entity.aiState.targetPosition) {
+                            const direction = new THREE.Vector3().subVectors(entity.aiState.targetPosition, entity.position);
+                            direction.y = 0; // Don't move vertically
+                            const distanceToTarget = direction.length();
+
+                            if (distanceToTarget < 0.5) { // Reached target
+                                entity.aiState.state = 'idle';
+                                entity.aiState.targetPosition = null;
+                                entity.aiState.maxIdleTime = Math.random() * 5000 + 2000;
+                            } else {
+                                direction.normalize();
+                                entity.position.addScaledVector(direction, speed);
+                                // Smooth rotation
+                                const targetRotation = Math.atan2(direction.x, direction.z);
+                                entity.rotation.y = THREE.MathUtils.lerp(entity.rotation.y, targetRotation, 0.1);
+                            }
+                        } else {
+                            entity.aiState.state = 'idle'; // No target, go back to idle
+                        }
+                        // Passive flee check / Aggro check
+                        const distanceToPlayer = entity.position.distanceTo(player.position);
+                        if (entity.userData.hostility === 'passive' && distanceToPlayer < 5) {
+                            entity.aiState.state = 'flee';
+                        } else if (entity.userData.hostility === 'aggressive' && distanceToPlayer < entity.userData.detectionRange) {
+                            entity.aiState.state = 'chase';
+                        }
+                        break;
+
+                    case 'flee':
+                        const fleeDirection = new THREE.Vector3().subVectors(entity.position, player.position);
+                        fleeDirection.y = 0;
+                        fleeDirection.normalize();
+                        entity.position.addScaledVector(fleeDirection, speed * 1.5); // Flee faster
+                        entity.rotation.y = Math.atan2(fleeDirection.x, fleeDirection.z);
+
+                        if (entity.position.distanceTo(player.position) > 15) {
+                            entity.aiState.state = 'idle';
+                        }
+                        break;
+
+                    case 'chase':
+                        if (entity.userData.hostility !== 'aggressive') {
+                            entity.aiState.state = 'idle'; break;
+                        }
+                        const chaseDirection = new THREE.Vector3().subVectors(player.position, entity.position);
+                        chaseDirection.y = 0;
+                        const dist = chaseDirection.length();
+                        chaseDirection.normalize();
+
+                        if (dist > entity.userData.detectionRange * 1.5) { // Player too far
+                            entity.aiState.state = 'idle';
+                        } else if (dist < 1.5) { // Close enough to attack
+                            const now = Date.now();
+                            if (now - entity.aiState.lastAttackTime > entity.aiState.attackCooldown) {
+                                state.player.health = Math.max(0, state.player.health - entity.userData.attackDamage);
+                                updateStatusBars();
+                                showMessage(`${entity.userData.name} attacked you for ${entity.userData.attackDamage} damage!`);
+                                entity.aiState.lastAttackTime = now;
+                                // Simple knockback?
+                                // player.position.addScaledVector(chaseDirection, -0.5);
+                            }
+                            // Don't move while attacking? Or strafe? For now, stop moving.
+                        } else { // Move towards player
+                            entity.position.addScaledVector(chaseDirection, speed);
+                            entity.rotation.y = Math.atan2(chaseDirection.x, chaseDirection.z);
+                        }
+                        break;
+                }
+            });
+        }
+
+        // --- Game Systems ---
+        function updateDayNightCycle(deltaSeconds) {
+            const timeScale = 0.05; // How fast time passes (lower is slower)
+            state.world.time = (state.world.time + deltaSeconds * timeScale) % 1; // Keep time between 0 and 1
+
+            // Calculate light intensity (0 at midnight, 1 at noon)
+            const lightIntensity = Math.max(0, Math.sin(state.world.time * Math.PI)); // 0 to 1 based on half cycle
+
+            // Ambient light: Dimmer at night
+            ambientLight.intensity = lightIntensity * 0.4 + 0.1; // Min 0.1, Max 0.5
+
+            // Directional light (sun/moon)
+            const sunAngle = state.world.time * Math.PI * 2 - Math.PI / 2; // Start sunrise at time 0
+            directionalLight.position.x = Math.cos(sunAngle) * 30;
+            directionalLight.position.y = Math.sin(sunAngle) * 30;
+            directionalLight.position.z = 15; // Keep Z offset consistent
+            directionalLight.intensity = Math.max(0, Math.sin(state.world.time * Math.PI)) * 0.9 + 0.1; // Stronger peak
+
+            // Sky Color Lerp (Blue daytime, Dark blue/black nighttime)
+            const dayColor = new THREE.Color(0x87CEEB); // Sky blue
+            const nightColor = new THREE.Color(0x000033); // Dark blue
+            const bgColor = new THREE.Color();
+            // Use a curve for smoother transition around sunrise/sunset
+            const lerpFactor = Math.pow(Math.max(0, Math.sin(state.world.time * Math.PI)), 0.5); // Powers make transition sharper/softer
+            bgColor.lerpColors(nightColor, dayColor, lerpFactor);
+            scene.background = bgColor;
+            scene.fog = new THREE.Fog(bgColor, 50, 100); // Add fog matching background
+        }
+        
+        function updatePlayerNeeds(deltaSeconds) {
+            const hungerRate = 0.5; // Points per second
+            const thirstRate = 0.75; // Points per second
+            const damageRate = 3; // Health points per second when starving/dehydrated
+
+            state.player.hunger -= hungerRate * deltaSeconds;
+            state.player.thirst -= thirstRate * deltaSeconds;
+
+            state.player.hunger = Math.max(0, state.player.hunger);
+            state.player.thirst = Math.max(0, state.player.thirst);
+
+            let takingDamage = false;
+            if (state.player.hunger <= 0) {
+                state.player.health -= damageRate * deltaSeconds;
+                takingDamage = true;
+            }
+            if (state.player.thirst <= 0) {
+                // Make thirst more dangerous or stack damage
+                state.player.health -= damageRate * 1.5 * deltaSeconds;
+                takingDamage = true;
+            }
+
+            state.player.health = Math.max(0, state.player.health);
+
+            if (state.player.health <= 0 && !state.player.isDead) { // Check isDead flag
+                state.player.isDead = true; // Prevent multiple death messages/actions
+                showMessage("You died!");
+                controls.enabled = false; // Disable controls on death
+
+                // Simple respawn after delay
+                setTimeout(() => {
+                    player.position.set(0, 1, 0);
+                    state.player.position.copy(player.position); // Update state position
+                    state.player.health = 100;
+                    state.player.hunger = 80;
+                    state.player.thirst = 80;
+                    state.player.isDead = false;
+                    controls.enabled = true; // Re-enable controls
+                    updateStatusBars(); // Update UI immediately
+                    showMessage("You have respawned.");
+
+                    // Clear some inventory (example: remove half of stackable resources)
+                    state.inventory.items = state.inventory.items.filter(item => {
+                        if (item.stackable && item.type === 'resource') {
+                            item.count = Math.floor(item.count / 2);
+                            if (item.count <= 0) return false; // Remove if count becomes 0
+                        }
+                        return true; // Keep non-resources or tools etc.
+                    });
+
+                    updateInventoryUI();
+                    updateQuickSlots();
+                    showMessage("You lost some resources!");
+                }, 3000); // 3 second delay before respawn
+            }
+
+            // Only update bars if not dead (or handled differently during death screen)
+            if (!state.player.isDead) {
+                updateStatusBars();
+            }
+        }
+
+        // --- Animation Loop ---
+        const interactionDistance = 5; // Max distance to interact
+        // --- Initialize Game ---
+        function initGame() {
+            console.log("Initializing game...");
+            
+            // Create scene
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true; // Enable shadows
+            document.body.appendChild(renderer.domElement);
+
+            camera.position.set(15, 15, 15); // Slightly closer isometric view
+            camera.lookAt(0, 0, 0);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 5; // Closer min distance
+            controls.maxDistance = 50;
+            controls.maxPolarAngle = Math.PI / 2.1; // Allow looking slightly lower
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 15);
+            directionalLight.castShadow = true;
+            // Configure shadow map
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 50;
+            directionalLight.shadow.camera.left = -50;
+            directionalLight.shadow.camera.right = 50;
+            directionalLight.shadow.camera.top = 50;
+            directionalLight.shadow.camera.bottom = -50;
+            scene.add(directionalLight);
+
+            const groundGeometry = new THREE.PlaneGeometry(100, 100);
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x3d9e41, side: THREE.DoubleSide });
+            ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            const playerGeometry = new THREE.BoxGeometry(1, 2, 1);
+            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x2980b9 });
+            player = new THREE.Mesh(playerGeometry, playerMaterial);
+            player.position.set(state.player.position.x, state.player.position.y, state.player.position.z);
+            player.castShadow = true;
+            player.receiveShadow = false; // Player usually shouldn't receive shadow on itself from main light
+            scene.add(player);
+            
+            // Initialize raycaster for interactions
+            interactionRaycaster = new THREE.Raycaster();
+            
+            // Set up input handlers
+            document.addEventListener('keydown', (event) => {
+                keysPressed[event.key.toLowerCase()] = true;
+
+                if (!state.ui.inventoryOpen) { // Only handle game keys if inventory is closed
+                    if ('123456'.includes(event.key)) {
+                        state.inventory.selectedSlot = parseInt(event.key) - 1;
+                        updateQuickSlots();
+                    }
+                    // Handle interaction key press
+                    if (event.key.toLowerCase() === 'e') {
+                        // Check for interaction immediately on press
+                        const interactable = getInteractableObject();
+                        if (interactable) {
+                            interactWithObject(interactable);
+                        }
+                    }
+                }
+
+                // Toggle inventory - allow even if other UI is open?
+                if (event.key === 'Tab') {
+                    event.preventDefault();
+                    toggleInventory();
+                }
+            });
+
+            document.addEventListener('keyup', (event) => {
+                keysPressed[event.key.toLowerCase()] = false;
+            });
+
+            // Initialize player items and inventory
+            setupInventory();
+            initializePlayerItems();
+            generateWorld();
+            updateInventoryUI();
+            updateQuickSlots();
+            updateStatusBars();
+            
+            // Set initial camera target
+            controls.target.copy(player.position);
+            
+            // Start the game logic
+            showMessage("Welcome to Survival Game! [WASD] Move, [Tab] Inventory, [E] Interact, [1-6] Quick Slots");
+            clock = new THREE.Clock();
+            clock.start();
+            animate();
+            console.log("Game initialized.");
+        }
+        
+        // Start the loading process
+        window.addEventListener('DOMContentLoaded', startLoading);
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Initialize player's starting items
+        function initializePlayerItems() {
+            // Add item definitions if they don't exist from itemDatabase yet
+            const axeData = itemDatabase['axe'] ? { ...itemDatabase['axe'] } : {
+                id: 'axe', name: 'Axe', icon: 'axe-icon', stackable: false, type: 'tool',
+                durability: 100, damage: 15, useFunction: 'chopTree'
+            };
+            const knifeData = itemDatabase['knife'] ? { ...itemDatabase['knife'] } : {
+                id: 'knife', name: 'Knife', icon: 'knife-icon', stackable: false, type: 'weapon',
+                durability: 100, damage: 10, useFunction: 'attack'
+            };
+
+            addItemToInventory(axeData);
+            addItemToInventory(knifeData);
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta(); // Delta time in seconds
+
+            // Update controls (even if inventory is open, maybe allow rotation?)
+            controls.update();
+
+            // Skip game updates if inventory is open or player is dead
+            if (!state.ui.inventoryOpen && !state.player.isDead) {
+                // --- Player Movement ---
+                const moveVector = new THREE.Vector3(0, 0, 0);
+                if (keysPressed['w']) moveVector.z -= 1;
+                if (keysPressed['s']) moveVector.z += 1;
+                if (keysPressed['a']) moveVector.x -= 1;
+                if (keysPressed['d']) moveVector.x += 1;
+
+                if (moveVector.lengthSq() > 0) { // Use lengthSq for performance
+                    moveVector.normalize();
+
+                    // Get camera's forward and right vectors, flattened onto the XZ plane
+                    const cameraDirection = new THREE.Vector3();
+                    camera.getWorldDirection(cameraDirection);
+                    cameraDirection.y = 0;
+                    cameraDirection.normalize();
+
+                    const cameraRight = new THREE.Vector3();
+                    cameraRight.crossVectors(camera.up, cameraDirection).normalize(); // Use camera.up
+
+                    // Calculate movement direction based on camera orientation
+                    const moveDirection = new THREE.Vector3();
+                    moveDirection.addScaledVector(cameraDirection, -moveVector.z); // W/S control forward/back relative to camera
+                    moveDirection.addScaledVector(cameraRight, moveVector.x); // A/D control strafe relative to camera
+                    moveDirection.normalize();
+
+                    // Apply movement
+                    const currentMoveSpeed = moveSpeed * delta; // Speed adjusted by delta time
+                    player.position.x += moveDirection.x * currentMoveSpeed;
+                    player.position.z += moveDirection.z * currentMoveSpeed;
+
+                    // Rotate player to face movement direction (lerp for smoothness)
+                    const targetRotation = Math.atan2(moveDirection.x, moveDirection.z);
+                    player.rotation.y = THREE.MathUtils.lerp(player.rotation.y, targetRotation, 0.15);
+
+                    // Update player state position
+                    state.player.position.copy(player.position);
+
+                    // Make camera follow player smoothly (adjust target)
+                    const targetPosition = player.position.clone();
+                    controls.target.lerp(targetPosition, 0.1); // Smoothly move target towards player
+                } else {
+                    // If not moving, ensure controls target stays near player
+                    if (controls.target.distanceToSquared(player.position) > 0.1) {
+                        controls.target.lerp(player.position, 0.1);
+                    }
+                }
+
+                // Check for interactions (update UI prompt)
+                checkInteractions();
+
+                // Update AI
+                updateAI(delta); // Pass delta in seconds
+
+                // Update day/night cycle
+                updateDayNightCycle(delta);
+
+                // Update player needs
+                updatePlayerNeeds(delta);
+            } else if (state.ui.inventoryOpen) {
+                // Things to do while inventory is open (e.g., maybe update tooltips?)
+            }
+
+            // Render the scene
+            renderer.render(scene, camera);
+        }
+
+        function spawnEntity(type, x, z) {
+            let geometry, material, entity;
+            const entityData = entityTypes[type];
+            if (!entityData) {
+                console.error("Unknown entity type to spawn:", type);
+                return null;
+            }
+
+            switch (type) {
+                case 'tree':
+                    const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
+                    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                    entity = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                    const leavesGeometry = new THREE.ConeGeometry(2, 4, 8);
+                    const leavesMaterial = new THREE.MeshStandardMaterial({ color: 0x2ECC71 });
+                    const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+                    leaves.position.y = 3.5; // Adjusted height
+                    leaves.castShadow = true;
+                    leaves.receiveShadow = false;
+                    entity.add(leaves);
+                    entity.position.set(x, 2.5, z); // Base of trunk on ground
+                    entity.userData = {
+                        type: 'tree',
+                        health: entityData.health,
+                        interactable: true,
+                        requiresTool: 'axe'
+                    };
+                    break;
+
+                case 'rock':
+                    geometry = new THREE.DodecahedronGeometry(1.5, 0);
+                    material = new THREE.MeshStandardMaterial({ color: 0x7f8c8d });
+                    entity = new THREE.Mesh(geometry, material);
+                    entity.position.set(x, 0.8, z); // Adjust Y based on geometry size
+                    entity.userData = {
+                        type: 'rock',
+                        health: entityData.health,
+                        interactable: true,
+                        requiresTool: 'pickaxe'
+                    };
+                    break;
+
+                case 'animal_deer':
+                    // Simple deer group
+                    const body = new THREE.Group();
+                    const deerBody = new THREE.Mesh(
+                        new THREE.CapsuleGeometry(0.5, 1, 4, 8),
+                        new THREE.MeshStandardMaterial({ color: 0xA0522D })
+                    );
+                    deerBody.position.set(0, 0.7, 0);
+                    deerBody.rotation.x = Math.PI / 2;
+                    
+                    const head = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.3, 8, 8),
+                        new THREE.MeshStandardMaterial({ color: 0x8B4513 })
+                    );
+                    head.position.set(0, 0.7, 0.8);
+                    
+                    body.add(deerBody, head);
+                    entity = body;
+                    entity.position.set(x, 0.75, z); // Set base Y position correctly
+                    entity.userData = {
+                        type: 'animal_deer',
+                        name: 'Deer',
+                        health: entityData.health,
+                        interactable: true,
+                        speed: entityData.speed,
+                        hostility: 'passive',
+                        requiresTool: 'knife'
+                    };
+                    entity.aiState = { 
+                        state: 'idle',
+                        idleTime: 0,
+                        maxIdleTime: 5000,
+                        targetPosition: null
+                    };
+                    // Make sure individual meshes cast/receive shadows
+                    entity.traverse(child => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = false;
+                            child.userData = entity.userData;
+                        }
+                    });
+                    break;
+                case 'animal_wolf':
+                    // Simple wolf group
+                    const wolfBody = new THREE.Group();
+                    const wolfTorso = new THREE.Mesh(
+                        new THREE.CapsuleGeometry(0.4, 0.8, 4, 8),
+                        new THREE.MeshStandardMaterial({ color: 0x4D4D4D })
+                    );
+                    wolfTorso.position.set(0, 0.6, 0);
+                    wolfTorso.rotation.x = Math.PI / 2;
+                    
+                    const wolfHead = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.25, 8, 8),
+                        new THREE.MeshStandardMaterial({ color: 0x333333 })
+                    );
+                    wolfHead.position.set(0, 0.6, 0.6);
+                     
+                    wolfBody.add(wolfTorso, wolfHead);
+                    entity = wolfBody;
+                    entity.position.set(x, 0.6, z); // Set base Y position correctly
+                    entity.userData = {
+                        type: 'animal_wolf',
+                        name: 'Wolf',
+                        health: entityData.health,
+                        interactable: true,
+                        speed: entityData.speed,
+                        hostility: 'aggressive',
+                        detectionRange: entityData.detectionRange,
+                        attackDamage: entityData.attackDamage,
+                        requiresTool: 'knife'
+                    };
+                    entity.aiState = { 
+                        state: 'idle',
+                        idleTime: 0,
+                        maxIdleTime: 3000,
+                        targetPosition: null,
+                        lastAttackTime: 0,
+                        attackCooldown: 2000
+                    };
+                    entity.traverse(child => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = false;
+                            child.userData = entity.userData;
+                        }
+                    });
+                    break;
+                case 'barrel':
+                    // Simple barrel
+                    geometry = new THREE.CylinderGeometry(0.7, 0.7, 1.2, 12);
+                    material = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                    entity = new THREE.Mesh(geometry, material);
+                    entity.position.set(x, 0.6, z);
+                    entity.userData = {
+                        type: 'barrel',
+                        health: entityData.health,
+                        interactable: true,
+                        lootTable: entityData.lootTable
+                    };
+                    break;
+
+                default:
+                    console.warn("Unhandled entity type in spawnEntity:", type);
+                    return null;
+            }
+
+            if (entity) {
+                // Ensure all spawned entities cast shadows
+                if(entity.isMesh) { // Simple mesh entity
+                    entity.castShadow = true;
+                    entity.receiveShadow = true; // Rocks, trees receive shadows
+                } else if (entity.isGroup) { // Groups like animals
+                    entity.traverse(function(child) {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            // receiveShadow is often false for moving things unless needed
+                        }
+                    });
+                }
+
+                // Add entity's main object (Mesh or Group) to the scene
+                scene.add(entity);
+                // Add the main object to the interactable list
+                state.world.entities.push(entity);
+            }
+
+            return entity;
+        }
