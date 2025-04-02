@@ -1,0 +1,1916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Isometric Survival Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #loadingScreen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+        }
+        #progressBar {
+            width: 50%;
+            height: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        #progressFill {
+            height: 100%;
+            background-color: #4CAF50;
+            border-radius: 10px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        #quickSlots {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+        .quickSlot {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        .quickSlot.selected {
+            border-color: #ff0;
+        }
+        .slotNumber {
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            background-color: #333;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+        }
+        .slotItem {
+            width: 80%;
+            height: 80%;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            position: relative;
+        }
+        .slotCount {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            border-radius: 10px;
+            padding: 2px 5px;
+            font-size: 10px;
+        }
+        #inventory {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 800px;
+            height: 600px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 2px solid #ccc;
+            border-radius: 10px;
+            display: none;
+            z-index: 100;
+            color: white;
+            padding: 20px;
+        }
+        #inventoryTitle {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        #inventoryContent {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 10px;
+            height: 75%;
+            overflow-y: auto;
+        }
+        .invSlot {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(50, 50, 50, 0.7);
+            border: 1px solid #666;
+            border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        .invItem {
+            width: 80%;
+            height: 80%;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            position: relative;
+        }
+        .invCount {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            border-radius: 10px;
+            padding: 2px 5px;
+            font-size: 10px;
+        }
+        #statusBar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 10;
+        }
+        .statusMeter {
+            width: 200px;
+            height: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+        .statusFill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        .statusLabel {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-size: 12px;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+        }
+        #healthFill {
+            background-color: #f44336;
+            width: 100%;
+        }
+        #hungerFill {
+            background-color: #ff9800;
+            width: 80%;
+        }
+        #thirstFill {
+            background-color: #2196F3;
+            width: 90%;
+        }
+        #craftingMenu {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 2px solid #ccc;
+            border-radius: 10px;
+            padding: 10px;
+            color: white;
+            display: none;
+            z-index: 10;
+        }
+        #craftingTitle {
+            font-size: 18px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .craftItem {
+            display: flex;
+            padding: 5px;
+            margin: 5px 0;
+            background-color: rgba(50, 50, 50, 0.7);
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .craftItem:hover {
+            background-color: rgba(70, 70, 70, 0.7);
+        }
+        .craftIcon {
+            width: 40px;
+            height: 40px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            margin-right: 10px;
+        }
+        .craftInfo {
+            flex-grow: 1;
+        }
+        .craftName {
+            font-weight: bold;
+        }
+        .craftRequirements {
+            font-size: 12px;
+            color: #ccc;
+        }
+        #notification {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            display: none;
+            z-index: 101;
+        }
+        #storageBox {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 700px;
+            height: 500px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 2px solid #8b5a2b;
+            border-radius: 10px;
+            display: none;
+            z-index: 100;
+            color: white;
+            padding: 20px;
+        }
+        #storageTitle {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        #storageContainer {
+            display: flex;
+            height: 80%;
+        }
+        #storageContent, #inventoryForStorage {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            overflow-y: auto;
+            padding: 10px;
+            height: 100%;
+        }
+        #storageContainer .divider {
+            width: 2px;
+            background-color: #8b5a2b;
+            margin: 0 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="loadingScreen">
+            <h1>Loading Isometric Survival Game</h1>
+            <div id="progressBar">
+                <div id="progressFill"></div>
+            </div>
+            <div id="loadingText">Checking compatibility...</div>
+        </div>
+        
+        <div id="statusBar">
+            <div class="statusMeter">
+                <div id="healthFill" class="statusFill"></div>
+                <div class="statusLabel">Health</div>
+            </div>
+            <div class="statusMeter">
+                <div id="hungerFill" class="statusFill"></div>
+                <div class="statusLabel">Hunger</div>
+            </div>
+            <div class="statusMeter">
+                <div id="thirstFill" class="statusFill"></div>
+                <div class="statusLabel">Thirst</div>
+            </div>
+        </div>
+        
+        <div id="quickSlots">
+            <div class="quickSlot" data-index="0">
+                <div class="slotNumber">1</div>
+                <div class="slotItem" style="background-image: url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect x=\"30\" y=\"10\" width=\"10\" height=\"70\" fill=\"brown\"/><polygon points=\"40,10 80,30 80,60 40,80\" fill=\"silver\"/></svg>');">
+                    <div class="slotCount">1</div>
+                </div>
+            </div>
+            <div class="quickSlot" data-index="1">
+                <div class="slotNumber">2</div>
+                <div class="slotItem" style="background-image: url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect x=\"40\" y=\"20\" width=\"5\" height=\"60\" fill=\"brown\"/><polygon points=\"45,20 70,10 75,15 50,30\" fill=\"silver\"/></svg>');">
+                    <div class="slotCount">1</div>
+                </div>
+            </div>
+            <div class="quickSlot" data-index="2">
+                <div class="slotNumber">3</div>
+            </div>
+            <div class="quickSlot" data-index="3">
+                <div class="slotNumber">4</div>
+            </div>
+            <div class="quickSlot" data-index="4">
+                <div class="slotNumber">5</div>
+            </div>
+            <div class="quickSlot" data-index="5">
+                <div class="slotNumber">6</div>
+            </div>
+        </div>
+        
+        <div id="inventory">
+            <div id="inventoryTitle">Inventory</div>
+            <div id="inventoryContent"></div>
+        </div>
+        
+        <div id="craftingMenu">
+            <div id="craftingTitle">Crafting</div>
+            <div class="craftItem">
+                <div class="craftIcon" style="background-image: url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"brown\"/><rect x=\"20\" y=\"20\" width=\"60\" height=\"60\" fill=\"tan\"/></svg>');"></div>
+                <div class="craftInfo">
+                    <div class="craftName">Storage Box</div>
+                    <div class="craftRequirements">Requires: 50 Wood, 10 Nails</div>
+                </div>
+            </div>
+            <div class="craftItem">
+                <div class="craftIcon" style="background-image: url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect x=\"40\" y=\"30\" width=\"20\" height=\"60\" fill=\"brown\"/><circle cx=\"50\" cy=\"30\" r=\"20\" fill=\"green\"/></svg>');"></div>
+                <div class="craftInfo">
+                    <div class="craftName">Wooden Wall</div>
+                    <div class="craftRequirements">Requires: 100 Wood</div>
+                </div>
+            </div>
+            <div class="craftItem">
+                <div class="craftIcon" style="background-image: url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect x=\"10\" y=\"90\" width=\"80\" height=\"5\" fill=\"brown\"/><rect x=\"10\" y=\"80\" width=\"80\" height=\"10\" fill=\"tan\"/></svg>');"></div>
+                <div class="craftInfo">
+                    <div class="craftName">Foundation</div>
+                    <div class="craftRequirements">Requires: 150 Wood, 20 Stone</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="storageBox">
+            <div id="storageTitle">Storage Box</div>
+            <div id="storageContainer">
+                <div id="storageContent"></div>
+                <div class="divider"></div>
+                <div id="inventoryForStorage"></div>
+            </div>
+        </div>
+        
+        <div id="notification"></div>
+    </div>
+
+    <script type="text/javascript">
+        // Check for Three.js and load it if not present
+        function loadScript(url, callback) {
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.src = url;
+            script.onload = callback;
+            script.onerror = function() {
+                console.error('Failed to load script:', url);
+                showError('Failed to load required library: ' + url);
+            };
+            document.head.appendChild(script);
+        }
+        
+        function showError(message) {
+            const loadingText = document.getElementById('loadingText');
+            loadingText.innerHTML = `<span style="color:red">ERROR: ${message}</span>`;
+        }
+        
+        function updateProgress(percent, message) {
+            const progressFill = document.getElementById('progressFill');
+            const loadingText = document.getElementById('loadingText');
+            progressFill.style.width = `${percent}%`;
+            if (message) {
+                loadingText.textContent = message;
+            }
+        }
+        
+        // Start by checking and loading Three.js
+        if (typeof THREE === 'undefined') {
+            updateProgress(10, 'Loading Three.js...');
+            loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js', function() {
+                updateProgress(30, 'Three.js loaded. Loading modules...');
+                updateProgress(40, 'OrbitControls not needed for this game');
+                updateProgress(50, 'Checking Three.js compatibility');
+                
+                if (typeof THREE !== 'undefined') {
+                    updateProgress(60, 'Three.js loaded successfully');
+                    initGame();
+                } else {
+                    showError('Three.js failed to load properly');
+                }
+            });
+        } else {
+            updateProgress(50, 'Three.js already available');
+            initGame();
+        }
+        
+        // Game initialization
+        function initGame() {
+            updateProgress(70, 'Initializing game...');
+            
+            // Game state
+            const gameState = {
+                player: {
+                    health: 100,
+                    hunger: 80,
+                    thirst: 90,
+                    position: { x: 0, y: 0, z: 0 },
+                    rotation: 0,
+                    speed: 0.5,
+                    selectedSlot: 0
+                },
+                inventory: [
+                    { id: 'axe', name: 'Axe', count: 1, type: 'tool', icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="30" y="10" width="10" height="70" fill="brown"/><polygon points="40,10 80,30 80,60 40,80" fill="silver"/></svg>' },
+                    { id: 'knife', name: 'Knife', count: 1, type: 'weapon', icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="40" y="20" width="5" height="60" fill="brown"/><polygon points="45,20 70,10 75,15 50,30" fill="silver"/></svg>' },
+                    { id: 'pickaxe', name: 'Pickaxe', count: 1, type: 'tool', icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="30" y="30" width="10" height="60" fill="brown"/><polygon points="40,30 80,10 85,20 45,40" fill="silver"/></svg>' },
+                ],
+                quickSlots: [0, 1, 2, null, null, null], // References to inventory indices
+                world: {
+                    trees: [],
+                    rocks: [],
+                    animals: [],
+                    buildings: [],
+                    resources: []
+                },
+                settings: {
+                    treeCount: 50,
+                    rockCount: 30,
+                    animalCount: 20,
+                    worldSize: 100
+                },
+                ui: {
+                    inventoryOpen: false,
+                    craftingOpen: false,
+                    storageOpen: false,
+                    activeStorage: null
+                },
+                time: {
+                    current: 600,
+                    dayLength: 1200, // in seconds
+                    dayNightCycle: true
+                }
+            };
+            
+            // Initialize Three.js scene
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue
+            
+            // Create camera
+            const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(10, 10, 10);
+            camera.lookAt(0, 0, 0);
+            
+            // Create renderer
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            
+            // Add renderer to DOM
+            const gameContainer = document.getElementById('gameContainer');
+            gameContainer.appendChild(renderer.domElement);
+            
+            // Create lights
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.camera.top = 50;
+            directionalLight.shadow.camera.bottom = -50;
+            directionalLight.shadow.camera.left = -50;
+            directionalLight.shadow.camera.right = 50;
+            scene.add(directionalLight);
+            
+            // Create ground
+            const groundGeometry = new THREE.PlaneGeometry(gameState.settings.worldSize * 2, gameState.settings.worldSize * 2);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x3a9d23, 
+                roughness: 0.8,
+                metalness: 0.2 
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Create player character
+            const playerGeometry = new THREE.BoxGeometry(1, 2, 1);
+            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x1565c0 });
+            const player = new THREE.Mesh(playerGeometry, playerMaterial);
+            player.position.y = 1;
+            player.castShadow = true;
+            player.receiveShadow = true;
+            scene.add(player);
+            
+            // Set up camera to follow player in isometric view
+            function updateCameraPosition() {
+                // Isometric camera position - 45 degrees rotated, elevated and looking at player
+                const distance = 15;
+                const height = 10;
+                const angle = Math.PI / 4; // 45 degrees
+                
+                camera.position.x = player.position.x - distance * Math.cos(angle);
+                camera.position.z = player.position.z - distance * Math.sin(angle);
+                camera.position.y = player.position.y + height;
+                
+                camera.lookAt(player.position);
+            }
+            
+            updateCameraPosition();
+            
+            // Generate world objects
+            function generateWorld() {
+                // Generate trees
+                for (let i = 0; i < gameState.settings.treeCount; i++) {
+                    createTree(
+                        (Math.random() - 0.5) * gameState.settings.worldSize * 1.8,
+                        (Math.random() - 0.5) * gameState.settings.worldSize * 1.8
+                    );
+                }
+                
+                // Generate rocks
+                for (let i = 0; i < gameState.settings.rockCount; i++) {
+                    createRock(
+                        (Math.random() - 0.5) * gameState.settings.worldSize * 1.8,
+                        (Math.random() - 0.5) * gameState.settings.worldSize * 1.8
+                    );
+                }
+                
+                // Generate animals
+                for (let i = 0; i < gameState.settings.animalCount; i++) {
+                    createAnimal(
+                        (Math.random() - 0.5) * gameState.settings.worldSize * 1.8,
+                        (Math.random() - 0.5) * gameState.settings.worldSize * 1.8
+                    );
+                }
+                
+                // Generate barrels for loot
+                for (let i = 0; i < 15; i++) {
+                    createBarrel(
+                        (Math.random() - 0.5) * gameState.settings.worldSize * 1.8,
+                        (Math.random() - 0.5) * gameState.settings.worldSize * 1.8
+                    );
+                }
+            }
+            
+            function createTree(x, z) {
+                // Tree trunk
+                const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 4, 8);
+                const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                trunk.position.set(x, 2, z);
+                trunk.castShadow = true;
+                trunk.receiveShadow = true;
+                
+                // Tree leaves
+                const leavesGeometry = new THREE.ConeGeometry(2, 5, 8);
+                const leavesMaterial = new THREE.MeshStandardMaterial({ color: 0x2E8B57 });
+                const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+                leaves.position.set(0, 3, 0);
+                leaves.castShadow = true;
+                
+                // Create tree group
+                const treeGroup = new THREE.Group();
+                treeGroup.add(trunk);
+                treeGroup.add(leaves);
+                treeGroup.position.set(x, 0, z);
+                scene.add(treeGroup);
+                
+                // Add to game state
+                gameState.world.trees.push({
+                    group: treeGroup,
+                    position: { x, z },
+                    health: 100,
+                    harvestable: true
+                });
+            }
+            
+            function createRock(x, z) {
+                const rockGeometry = new THREE.DodecahedronGeometry(1.5, 0);
+                const rockMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x7c7c7c,
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+                const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+                rock.position.set(x, 0.9, z);
+                rock.scale.y = 0.6;
+                rock.rotation.y = Math.random() * Math.PI * 2;
+                rock.castShadow = true;
+                rock.receiveShadow = true;
+                scene.add(rock);
+                
+                // Add to game state
+                gameState.world.rocks.push({
+                    mesh: rock,
+                    position: { x, z },
+                    health: 150,
+                    harvestable: true,
+                    type: Math.random() < 0.3 ? 'metal' : 'stone' // 30% chance for metal ore
+                });
+            }
+            
+            function createAnimal(x, z) {
+                // Simple animal representation
+                const bodyGeometry = new THREE.BoxGeometry(1.5, 1, 2);
+                const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xA0522D });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                
+                const headGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+                const headMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                const head = new THREE.Mesh(headGeometry, headMaterial);
+                head.position.set(0, 0.5, 1.2);
+                
+                const animal = new THREE.Group();
+                animal.add(body);
+                animal.add(head);
+                animal.position.set(x, 0.6, z);
+                animal.castShadow = true;
+                animal.receiveShadow = true;
+                scene.add(animal);
+                
+                // Add to game state
+                gameState.world.animals.push({
+                    group: animal,
+                    position: { x, z },
+                    health: 50,
+                    type: Math.random() < 0.5 ? 'deer' : 'boar',
+                    state: 'wandering',
+                    speed: 0.03 + Math.random() * 0.02,
+                    targetPosition: null,
+                    lastMoveTime: 0
+                });
+            }
+            
+            function createBarrel(x, z) {
+                const barrelGeometry = new THREE.CylinderGeometry(0.7, 0.7, 1.5, 16);
+                const barrelMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+                barrel.position.set(x, 0.75, z);
+                barrel.castShadow = true;
+                barrel.receiveShadow = true;
+                scene.add(barrel);
+                
+                // Add to game state
+                gameState.world.resources.push({
+                    mesh: barrel,
+                    position: { x, z },
+                    type: 'barrel',
+                    looted: false
+                });
+            }
+            
+            // UI functionality
+            function setupUI() {
+                const quickSlots = document.querySelectorAll('.quickSlot');
+                quickSlots.forEach((slot, index) => {
+                    slot.addEventListener('click', () => {
+                        selectQuickSlot(index);
+                    });
+                });
+                
+                document.addEventListener('keydown', (event) => {
+                    // Number keys 1-6 for quick slots
+                    if (event.key >= '1' && event.key <= '6') {
+                        const slotIndex = parseInt(event.key) - 1;
+                        selectQuickSlot(slotIndex);
+                    }
+                    
+                    // TAB key for inventory
+                    if (event.key === 'Tab') {
+                        event.preventDefault();
+                        toggleInventory();
+                    }
+                    
+                    // C key for crafting menu
+                    if (event.key === 'c' || event.key === 'C') {
+                        toggleCrafting();
+                    }
+                    
+                    // Movement keys
+                    handleMovementKeys(event);
+                });
+                
+                // Add event listeners for all craft items
+                const craftItems = document.querySelectorAll('.craftItem');
+                craftItems.forEach((item, index) => {
+                    item.addEventListener('click', () => {
+                        switch(index) {
+                            case 0:
+                                craftStorageBox();
+                                break;
+                            case 1:
+                                craftWoodenWall();
+                                break;
+                            case 2:
+                                craftFoundation();
+                                break;
+                        }
+                    });
+                });
+
+                updateQuickSlots();
+            }
+            
+            function selectQuickSlot(index) {
+                gameState.player.selectedSlot = index;
+                
+                // Update UI
+                document.querySelectorAll('.quickSlot').forEach((slot, i) => {
+                    if (i === index) {
+                        slot.classList.add('selected');
+                    } else {
+                        slot.classList.remove('selected');
+                    }
+                });
+            }
+            
+            function toggleInventory() {
+                const inventory = document.getElementById('inventory');
+                
+                if (gameState.ui.inventoryOpen) {
+                    inventory.style.display = 'none';
+                    gameState.ui.inventoryOpen = false;
+                } else {
+                    // Populate inventory before showing
+                    populateInventory();
+                    inventory.style.display = 'block';
+                    gameState.ui.inventoryOpen = true;
+                }
+            }
+            
+            function toggleCrafting() {
+                const craftingMenu = document.getElementById('craftingMenu');
+                
+                if (gameState.ui.craftingOpen) {
+                    craftingMenu.style.display = 'none';
+                    gameState.ui.craftingOpen = false;
+                } else {
+                    craftingMenu.style.display = 'block';
+                    gameState.ui.craftingOpen = true;
+                }
+            }
+            
+            function populateInventory() {
+                const inventoryContent = document.getElementById('inventoryContent');
+                inventoryContent.innerHTML = '';
+                
+                // Create slots for inventory items
+                for (let i = 0; i < 32; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'invSlot';
+                    
+                    // If there is an item in this inventory slot
+                    if (i < gameState.inventory.length) {
+                        const item = gameState.inventory[i];
+                        
+                        const itemElement = document.createElement('div');
+                        itemElement.className = 'invItem';
+                        itemElement.style.backgroundImage = `url('${item.icon}')`;
+                        
+                        const countElement = document.createElement('div');
+                        countElement.className = 'invCount';
+                        countElement.textContent = item.count;
+                        
+                        itemElement.appendChild(countElement);
+                        slot.appendChild(itemElement);
+                        
+                        // Add drag functionality for item
+                        slot.addEventListener('dragstart', (e) => {
+                            e.dataTransfer.setData('text/plain', i.toString());
+                        });
+                        
+                        slot.addEventListener('click', () => {
+                            // Add to quick slot if a slot is available
+                            const emptySlotIndex = gameState.quickSlots.indexOf(null);
+                            if (emptySlotIndex !== -1) {
+                                gameState.quickSlots[emptySlotIndex] = i;
+                                updateQuickSlots();
+                                showNotification(`${item.name} added to quick slot ${emptySlotIndex + 1}`);
+                            }
+                        });
+                    }
+                    
+                    slot.setAttribute('draggable', 'true');
+                    inventoryContent.appendChild(slot);
+                }
+            }
+            
+            function updateQuickSlots() {
+                const quickSlotElements = document.querySelectorAll('.quickSlot');
+                
+                for (let i = 0; i < quickSlotElements.length; i++) {
+                    const slot = quickSlotElements[i];
+                    const inventoryIndex = gameState.quickSlots[i];
+                    
+                    // Clear the slot
+                    while (slot.children.length > 1) { // Keep the slot number
+                        slot.removeChild(slot.lastChild);
+                    }
+                    
+                    // If there is an item in this quick slot
+                    if (inventoryIndex !== null && gameState.inventory[inventoryIndex]) {
+                        const item = gameState.inventory[inventoryIndex];
+                        
+                        const itemElement = document.createElement('div');
+                        itemElement.className = 'slotItem';
+                        itemElement.style.backgroundImage = `url('${item.icon}')`;
+                        
+                        const countElement = document.createElement('div');
+                        countElement.className = 'slotCount';
+                        countElement.textContent = item.count;
+                        
+                        itemElement.appendChild(countElement);
+                        slot.appendChild(itemElement);
+                    }
+                    
+                    // Add selected class if this is the current selected slot
+                    if (i === gameState.player.selectedSlot) {
+                        slot.classList.add('selected');
+                    } else {
+                        slot.classList.remove('selected');
+                    }
+                }
+            }
+            
+            function showNotification(message, duration = 3000) {
+                const notification = document.getElementById('notification');
+                notification.textContent = message;
+                notification.style.display = 'block';
+                
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                }, duration);
+            }
+            
+            function craftStorageBox() {
+                // Check if player has resources
+                const woodItem = gameState.inventory.find(item => item.id === 'wood');
+                const nailsItem = gameState.inventory.find(item => item.id === 'nails');
+                
+                const hasWood = woodItem && woodItem.count >= 50;
+                const hasNails = nailsItem && nailsItem.count >= 10;
+                
+                if (hasWood && hasNails) {
+                    // Remove resources
+                    woodItem.count -= 50;
+                    nailsItem.count -= 10;
+                    
+                    // Clean up inventory if items are gone
+                    cleanInventory();
+                    
+                    // Add storage box to inventory
+                    addToInventory({
+                        id: 'storageBox',
+                        name: 'Storage Box',
+                        count: 1,
+                        type: 'placeable',
+                        icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" fill="brown"/><rect x="20" y="20" width="60" height="60" fill="tan"/></svg>'
+                    });
+                    
+                    showNotification('Crafted Storage Box');
+                    updateQuickSlots();
+                } else {
+                    showNotification('Not enough resources! Need 50 Wood and 10 Nails');
+                }
+            }
+
+            function craftWoodenWall() {
+                const woodItem = gameState.inventory.find(item => item.id === 'wood');
+                const hasWood = woodItem && woodItem.count >= 100;
+                
+                if (hasWood) {
+                    woodItem.count -= 100;
+                    cleanInventory();
+                    addToInventory({
+                        id: 'woodenWall',
+                        name: 'Wooden Wall',
+                        count: 1,
+                        type: 'placeable',
+                        icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="40" y="30" width="20" height="60" fill="brown"/><circle cx="50" cy="30" r="20" fill="green"/></svg>'
+                    });
+                    showNotification('Crafted Wooden Wall');
+                    updateQuickSlots();
+                } else {
+                    showNotification('Not enough resources! Need 100 Wood');
+                }
+            }
+
+            function craftFoundation() {
+                const woodItem = gameState.inventory.find(item => item.id === 'wood');
+                const stoneItem = gameState.inventory.find(item => item.id === 'stone');
+                const hasWood = woodItem && woodItem.count >= 150;
+                const hasStone = stoneItem && stoneItem.count >= 20;
+                
+                if (hasWood && hasStone) {
+                    woodItem.count -= 150;
+                    stoneItem.count -= 20;
+                    cleanInventory();
+                    addToInventory({
+                        id: 'foundation',
+                        name: 'Foundation',
+                        count: 1,
+                        type: 'placeable',
+                        icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="90" width="80" height="5" fill="brown"/><rect x="10" y="80" width="80" height="10" fill="tan"/></svg>'
+                    });
+                    showNotification('Crafted Foundation');
+                    updateQuickSlots();
+                } else {
+                    showNotification('Not enough resources! Need 150 Wood and 20 Stone');
+                }
+            }
+            
+            function cleanInventory() {
+                // Remove items with 0 count
+                gameState.inventory = gameState.inventory.filter(item => item.count > 0);
+                
+                // Update quickslots
+                for (let i = 0; i < gameState.quickSlots.length; i++) {
+                    const inventoryIndex = gameState.quickSlots[i];
+                    if (inventoryIndex !== null) {
+                        // Check if the item at this index still exists
+                        const itemExists = gameState.inventory[inventoryIndex] !== undefined;
+                        if (!itemExists) {
+                            gameState.quickSlots[i] = null;
+                        }
+                    }
+                }
+            }
+            
+            function addToInventory(item) {
+                // Check if item already exists in inventory
+                const existingItem = gameState.inventory.find(i => i.id === item.id);
+                
+                if (existingItem) {
+                    existingItem.count += item.count;
+                } else {
+                    gameState.inventory.push(item);
+                }
+                
+                // If inventory is open, update it
+                if (gameState.ui.inventoryOpen) {
+                    populateInventory();
+                }
+            }
+            
+            function openStorage(storageId) {
+                const storageBox = document.getElementById('storageBox');
+                const storageContent = document.getElementById('storageContent');
+                const inventoryForStorage = document.getElementById('inventoryForStorage');
+                
+                // Find the storage in game data
+                const storage = gameState.world.buildings.find(b => b.id === storageId);
+                
+                if (!storage) {
+                    showNotification('Storage not found!');
+                    return;
+                }
+                
+                gameState.ui.activeStorage = storage;
+                
+                // Clear previous content
+                storageContent.innerHTML = '';
+                inventoryForStorage.innerHTML = '';
+                
+                // Populate storage slots
+                for (let i = 0; i < 20; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'invSlot';
+                    
+                    // If there is an item in this storage slot
+                    if (i < storage.items.length) {
+                        const item = storage.items[i];
+                        
+                        const itemElement = document.createElement('div');
+                        itemElement.className = 'invItem';
+                        itemElement.style.backgroundImage = `url('${item.icon}')`;
+                        
+                        const countElement = document.createElement('div');
+                        countElement.className = 'invCount';
+                        countElement.textContent = item.count;
+                        
+                        itemElement.appendChild(countElement);
+                        slot.appendChild(itemElement);
+                        
+                        // Add drag/click functionality
+                        slot.dataset.itemIndex = i;
+                        slot.addEventListener('click', () => {
+                            // Transfer item to inventory
+                            transferItemToInventory(storage, i);
+                        });
+                    }
+                    
+                    storageContent.appendChild(slot);
+                }
+                
+                // Populate inventory slots for the storage interface
+                for (let i = 0; i < gameState.inventory.length; i++) {
+                    const item = gameState.inventory[i];
+                    const slot = document.createElement('div');
+                    slot.className = 'invSlot';
+                    
+                    const itemElement = document.createElement('div');
+                    itemElement.className = 'invItem';
+                    itemElement.style.backgroundImage = `url('${item.icon}')`;
+                    
+                    const countElement = document.createElement('div');
+                    countElement.className = 'invCount';
+                    countElement.textContent = item.count;
+                    
+                    itemElement.appendChild(countElement);
+                    slot.appendChild(itemElement);
+                    
+                    // Add click functionality
+                    slot.dataset.inventoryIndex = i;
+                    slot.addEventListener('click', () => {
+                        // Transfer item to storage
+                        transferItemToStorage(storage, i);
+                    });
+                    
+                    inventoryForStorage.appendChild(slot);
+                }
+                
+                // Show the storage UI
+                storageBox.style.display = 'block';
+                gameState.ui.storageOpen = true;
+            }
+            
+            function transferItemToInventory(storage, storageItemIndex) {
+                const item = storage.items[storageItemIndex];
+                
+                // Remove from storage
+                storage.items.splice(storageItemIndex, 1);
+                
+                // Add to inventory
+                addToInventory(item);
+                
+                // Refresh the storage UI
+                openStorage(storage.id);
+            }
+            
+            function transferItemToStorage(storage, inventoryItemIndex) {
+                const item = gameState.inventory[inventoryItemIndex];
+                
+                // Create a copy of the item
+                const itemCopy = { ...item };
+                
+                // Remove from inventory
+                gameState.inventory.splice(inventoryItemIndex, 1);
+                
+                // Add to storage
+                storage.items.push(itemCopy);
+                
+                // Update quick slots if necessary
+                for (let i = 0; i < gameState.quickSlots.length; i++) {
+                    if (gameState.quickSlots[i] === inventoryItemIndex) {
+                        gameState.quickSlots[i] = null;
+                    } else if (gameState.quickSlots[i] > inventoryItemIndex) {
+                        gameState.quickSlots[i]--;
+                    }
+                }
+                
+                updateQuickSlots();
+                
+                // Refresh the storage UI
+                openStorage(storage.id);
+            }
+            
+            function handleMovementKeys(event) {
+                // Only allow movement if inventories are closed
+                if (gameState.ui.inventoryOpen || gameState.ui.craftingOpen || gameState.ui.storageOpen) {
+                    return;
+                }
+                
+                const speed = gameState.player.speed;
+                
+                switch (event.key) {
+                    case 'w':
+                    case 'W':
+                    case 'ArrowUp':
+                        movePlayer(0, -speed);
+                        break;
+                    case 's':
+                    case 'S':
+                    case 'ArrowDown':
+                        movePlayer(0, speed);
+                        break;
+                    case 'a':
+                    case 'A':
+                    case 'ArrowLeft':
+                        movePlayer(-speed, 0);
+                        break;
+                    case 'd':
+                    case 'D':
+                    case 'ArrowRight':
+                        movePlayer(speed, 0);
+                        break;
+                    case ' ': // space for action
+                        performAction();
+                        break;
+                }
+            }
+            
+            function movePlayer(deltaX, deltaZ) {
+                const newX = player.position.x + deltaX;
+                const newZ = player.position.z + deltaZ;
+                const worldLimit = gameState.settings.worldSize;
+            
+                // Check collision with objects
+                let canMove = true;
+                const playerSize = 1; // Player width/height
+            
+                // Check trees
+                for (const tree of gameState.world.trees) {
+                    if (!tree.harvestable) continue;
+                    const dx = newX - tree.position.x;
+                    const dz = newZ - tree.position.z;
+                    if (Math.sqrt(dx * dx + dz * dz) < playerSize + 1) {
+                        canMove = false;
+                        break;
+                    }
+                }
+            
+                // Check rocks
+                if (canMove) {
+                    for (const rock of gameState.world.rocks) {
+                        if (!rock.harvestable) continue;
+                        const dx = newX - rock.position.x;
+                        const dz = newZ - rock.position.z;
+                        if (Math.sqrt(dx * dx + dz * dz) < playerSize + 1.5) {
+                            canMove = false;
+                            break;
+                        }
+                    }
+                }
+            
+                // Check buildings
+                if (canMove) {
+                    for (const building of gameState.world.buildings) {
+                        const dx = newX - building.position.x;
+                        const dz = newZ - building.position.z;
+                        if (Math.sqrt(dx * dx + dz * dz) < playerSize + 2) {
+                            canMove = false;
+                            break;
+                        }
+                    }
+                }
+            
+                if (canMove && newX > -worldLimit && newX < worldLimit && newZ > -worldLimit && newZ < worldLimit) {
+                    player.position.x = newX;
+                    player.position.z = newZ;
+                    gameState.player.position.x = newX;
+                    gameState.player.position.z = newZ;
+                    updateCameraPosition();
+                }
+            
+                if (deltaX !== 0 || deltaZ !== 0) {
+                    const angle = Math.atan2(deltaZ, deltaX);
+                    player.rotation.y = angle;
+                    gameState.player.rotation = angle;
+                }
+            }
+            
+            function performAction() {
+                // Get the currently selected item
+                const quickSlotIndex = gameState.player.selectedSlot;
+                const inventoryIndex = gameState.quickSlots[quickSlotIndex];
+                
+                if (inventoryIndex === null) {
+                    showNotification('No item selected');
+                    return;
+                }
+                
+                const item = gameState.inventory[inventoryIndex];
+                
+                if (!item) {
+                    showNotification('No item selected');
+                    return;
+                }
+                
+                // Perform action based on selected item and nearby objects
+                switch (item.id) {
+                    case 'axe':
+                        chopNearestTree();
+                        break;
+                    case 'pickaxe':
+                        mineNearestRock();
+                        break;
+                    case 'knife':
+                    case 'bow':
+                    case 'rifle':
+                        huntNearestAnimal();
+                        break;
+                    case 'storageBox':
+                        placeStorageBox();
+                        break;
+                    default:
+                        searchNearestBarrel();
+                        break;
+                }
+            }
+            
+            function chopNearestTree() {
+                const playerPos = player.position;
+                let nearestTree = null;
+                let minDistance = 5; // Maximum interaction distance
+                
+                // Find the nearest tree
+                for (let i = 0; i < gameState.world.trees.length; i++) {
+                    const tree = gameState.world.trees[i];
+                    if (!tree.harvestable) continue;
+                    
+                    const treePos = tree.group.position;
+                    const distance = Math.sqrt(
+                        Math.pow(playerPos.x - treePos.x, 2) + 
+                        Math.pow(playerPos.z - treePos.z, 2)
+                    );
+                    
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestTree = tree;
+                    }
+                }
+                
+                if (nearestTree) {
+                    // Decrease tree health
+                    nearestTree.health -= 25;
+                    
+                    if (nearestTree.health <= 0) {
+                        // Tree is chopped down
+                        showNotification('Chopped down a tree');
+                        
+                        // Add wood to inventory
+                        const woodAmount = 10 + Math.floor(Math.random() * 10); // 10-19 wood
+                        addToInventory({
+                            id: 'wood',
+                            name: 'Wood',
+                            count: woodAmount,
+                            type: 'resource',
+                            icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="30" width="80" height="40" fill="brown"/><path d="M10,30 L30,10 L90,10 L90,50 L70,70 L10,70 Z" fill="brown"/></svg>'
+                        });
+                        
+                        // Remove tree from scene
+                        scene.remove(nearestTree.group);
+                        
+                        // Mark tree as not harvestable
+                        nearestTree.harvestable = false;
+                        
+                        // Animation for tree falling
+                        const fallingAnimation = () => {
+                            nearestTree.group.rotation.x += 0.05;
+                            if (nearestTree.group.rotation.x < Math.PI / 2) {
+                                requestAnimationFrame(fallingAnimation);
+                            } else {
+                                // Tree has fallen, remove it from scene
+                                scene.remove(nearestTree.group);
+                            }
+                        };
+                        
+                        fallingAnimation();
+                    } else {
+                        showNotification(`Chopping tree... ${nearestTree.health}% remaining`);
+                    }
+                } else {
+                    showNotification('No trees nearby');
+                }
+            }
+            
+            function mineNearestRock() {
+                const playerPos = player.position;
+                let nearestRock = null;
+                let minDistance = 4; // Maximum interaction distance
+                
+                // Find the nearest rock
+                for (let i = 0; i < gameState.world.rocks.length; i++) {
+                    const rock = gameState.world.rocks[i];
+                    if (!rock.harvestable) continue;
+                    
+                    const rockPos = rock.mesh.position;
+                    const distance = Math.sqrt(
+                        Math.pow(playerPos.x - rockPos.x, 2) + 
+                        Math.pow(playerPos.z - rockPos.z, 2)
+                    );
+                    
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestRock = rock;
+                    }
+                }
+                
+                if (nearestRock) {
+                    // Decrease rock health
+                    nearestRock.health -= 15;
+                    
+                    if (nearestRock.health <= 0) {
+                        // Rock is mined
+                        showNotification('Mined a rock');
+                        
+                        // Add resources to inventory
+                        if (nearestRock.type === 'stone') {
+                            const stoneAmount = 8 + Math.floor(Math.random() * 8); // 8-15 stone
+                            addToInventory({
+                                id: 'stone',
+                                name: 'Stone',
+                                count: stoneAmount,
+                                type: 'resource',
+                                icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="10,70 30,40 70,30 90,60 80,90 30,90" fill="gray"/></svg>'
+                            });
+                        } else if (nearestRock.type === 'metal') {
+                            const metalAmount = 5 + Math.floor(Math.random() * 5); // 5-9 metal
+                            addToInventory({
+                                id: 'metal',
+                                name: 'Metal Ore',
+                                count: metalAmount,
+                                type: 'resource',
+                                icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="10,70 30,40 70,30 90,60 80,90 30,90" fill="silver"/></svg>'
+                            });
+                        }
+                        
+                        // Sometimes add nails when mining metal
+                        if (nearestRock.type === 'metal' && Math.random() < 0.4) {
+                            const nailAmount = 1 + Math.floor(Math.random() * 5); // 1-5 nails
+                            addToInventory({
+                                id: 'nails',
+                                name: 'Nails',
+                                count: nailAmount,
+                                type: 'resource',
+                                icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="40" y="10" width="5" height="80" fill="silver"/><polygon points="35,85 50,85 42,95" fill="silver"/></svg>'
+                            });
+                        }
+                        
+                        // Remove rock from scene
+                        scene.remove(nearestRock.mesh);
+                        
+                        // Mark rock as not harvestable
+                        nearestRock.harvestable = false;
+                    } else {
+                        showNotification(`Mining rock... ${nearestRock.health}% remaining`);
+                    }
+                } else {
+                    showNotification('No rocks nearby');
+                }
+            }
+            
+            function huntNearestAnimal() {
+                const playerPos = player.position;
+                let nearestAnimal = null;
+                let minDistance = 8; // Hunting distance is longer
+                
+                // Find the nearest animal
+                for (let i = 0; i < gameState.world.animals.length; i++) {
+                    const animal = gameState.world.animals[i];
+                    if (animal.health <= 0) continue;
+                    
+                    const animalPos = animal.group.position;
+                    const distance = Math.sqrt(
+                        Math.pow(playerPos.x - animalPos.x, 2) + 
+                        Math.pow(playerPos.z - animalPos.z, 2)
+                    );
+                    
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestAnimal = animal;
+                    }
+                }
+                
+                if (nearestAnimal) {
+                    // Decrease animal health based on weapon
+                    const selectedItemIndex = gameState.quickSlots[gameState.player.selectedSlot];
+                    const selectedItem = selectedItemIndex !== null ? gameState.inventory[selectedItemIndex] : null;
+                    
+                    let damage = 10; // Default damage
+                    
+                    if (selectedItem) {
+                        if (selectedItem.id === 'knife') damage = 15;
+                        if (selectedItem.id === 'bow') damage = 30;
+                        if (selectedItem.id === 'rifle') damage = 50;
+                    }
+                    
+                    nearestAnimal.health -= damage;
+                    
+                    // Animal reacts to being hunted
+                    nearestAnimal.state = 'fleeing';
+                    const fleeAngle = Math.atan2(
+                        nearestAnimal.group.position.z - playerPos.z,
+                        nearestAnimal.group.position.x - playerPos.x
+                    );
+                    nearestAnimal.targetPosition = {
+                        x: nearestAnimal.group.position.x + Math.cos(fleeAngle) * 20,
+                        z: nearestAnimal.group.position.z + Math.sin(fleeAngle) * 20
+                    };
+                    
+                    if (nearestAnimal.health <= 0) {
+                        // Animal is hunted
+                        showNotification(`Hunted a ${nearestAnimal.type}`);
+                        
+                        // Add meat to inventory
+                        const meatAmount = 3 + Math.floor(Math.random() * 4); // 3-6 meat
+                        addToInventory({
+                            id: 'meat',
+                            name: `Raw ${nearestAnimal.type} Meat`,
+                            count: meatAmount,
+                            type: 'food',
+                            icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M30,30 Q50,10 70,30 Q90,50 70,70 Q50,90 30,70 Q10,50 30,30 Z" fill="red"/></svg>'
+                        });
+                        
+                        // Add leather sometimes
+                        if (Math.random() < 0.7) {
+                            const leatherAmount = 2 + Math.floor(Math.random() * 3); // 2-4 leather
+                            addToInventory({
+                                id: 'leather',
+                                name: 'Leather',
+                                count: leatherAmount,
+                                type: 'resource',
+                                icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M20,20 Q30,10 80,20 Q90,50 80,80 Q50,90 20,80 Q10,50 20,20 Z" fill="brown"/></svg>'
+                            });
+                        }
+                        
+                        // Remove animal from scene
+                        scene.remove(nearestAnimal.group);
+                        
+                        // Mark animal as dead
+                        nearestAnimal.health = 0;
+                    } else {
+                        showNotification(`Hunting ${nearestAnimal.type}... ${nearestAnimal.health}% health remaining`);
+                    }
+                } else {
+                    showNotification('No animals nearby');
+                }
+            }
+            
+            function searchNearestBarrel() {
+                const playerPos = player.position;
+                let nearestBarrel = null;
+                let minDistance = 3; // Maximum interaction distance
+                
+                // Find the nearest barrel
+                for (let i = 0; i < gameState.world.resources.length; i++) {
+                    const resource = gameState.world.resources[i];
+                    if (resource.type !== 'barrel' || resource.looted) continue;
+                    
+                    const resourcePos = resource.mesh.position;
+                    const distance = Math.sqrt(
+                        Math.pow(playerPos.x - resourcePos.x, 2) + 
+                        Math.pow(playerPos.z - resourcePos.z, 2)
+                    );
+                    
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestBarrel = resource;
+                    }
+                }
+                
+                if (nearestBarrel) {
+                    // Loot the barrel
+                    showNotification('Searching barrel...');
+                    
+                    // Mark barrel as looted
+                    nearestBarrel.looted = true;
+                    
+                    // Change barrel color to indicate it's been looted
+                    nearestBarrel.mesh.material.color.set(0x555555);
+                    
+                    // Random loot
+                    const lootRoll = Math.random();
+                    
+                    if (lootRoll < 0.3) {
+                        // Common: wood/stone
+                        const woodAmount = 5 + Math.floor(Math.random() * 10);
+                        addToInventory({
+                            id: 'wood',
+                            name: 'Wood',
+                            count: woodAmount,
+                            type: 'resource',
+                            icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="30" width="80" height="40" fill="brown"/><path d="M10,30 L30,10 L90,10 L90,50 L70,70 L10,70 Z" fill="brown"/></svg>'
+                        });
+                    } else if (lootRoll < 0.6) {
+                        // Uncommon: nails
+                        const nailAmount = 3 + Math.floor(Math.random() * 7);
+                        addToInventory({
+                            id: 'nails',
+                            name: 'Nails',
+                            count: nailAmount,
+                            type: 'resource',
+                            icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="40" y="10" width="5" height="80" fill="silver"/><polygon points="35,85 50,85 42,95" fill="silver"/></svg>'
+                        });
+                    } else if (lootRoll < 0.8) {
+                        // Rare: metal
+                        const metalAmount = 2 + Math.floor(Math.random() * 5);
+                        addToInventory({
+                            id: 'metal',
+                            name: 'Metal Ore',
+                            count: metalAmount,
+                            type: 'resource',
+                            icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="10,70 30,40 70,30 90,60 80,90 30,90" fill="silver"/></svg>'
+                        });
+                    } else if (lootRoll < 0.9) {
+                        // Very rare: tool
+                        if (Math.random() < 0.5) {
+                            addToInventory({
+                                id: 'pickaxe',
+                                name: 'Pickaxe',
+                                count: 1,
+                                type: 'tool',
+                                icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="30" y="30" width="10" height="60" fill="brown"/><polygon points="40,30 80,10 85,20 45,40" fill="silver"/></svg>'
+                            });
+                        } else {
+                            addToInventory({
+                                id: 'bow',
+                                name: 'Hunting Bow',
+                                count: 1,
+                                type: 'weapon',
+                                icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M30,10 Q60,50 30,90" stroke="brown" fill="none" stroke-width="5"/><line x1="30" y1="50" x2="70" y2="50" stroke="brown" stroke-width="2"/></svg>'
+                            });
+                        }
+                    } else {
+                        // Extremely rare: rifle
+                        addToInventory({
+                            id: 'rifle',
+                            name: 'Hunting Rifle',
+                            count: 1,
+                            type: 'weapon',
+                            icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="45" width="80" height="10" fill="brown"/><rect x="20" y="55" width="20" height="15" fill="brown"/><rect x="70" y="40" width="5" height="20" fill="silver"/></svg>'
+                        });
+                    }
+                } else {
+                    showNotification('No barrels nearby');
+                }
+            }
+            
+            function placeStorageBox() {
+                // Get the currently selected item
+                const quickSlotIndex = gameState.player.selectedSlot;
+                const inventoryIndex = gameState.quickSlots[quickSlotIndex];
+                
+                if (inventoryIndex === null || gameState.inventory[inventoryIndex].id !== 'storageBox') {
+                    return;
+                }
+                
+                // Create a storage box at player's position
+                const storageId = 'storage-' + Date.now();
+                
+                // Create the box mesh
+                const boxGeometry = new THREE.BoxGeometry(2, 2, 2);
+                const boxMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial);
+                
+                // Position it slightly in front of the player
+                const angle = player.rotation.y;
+                const distance = 3;
+                const offsetX = Math.cos(angle) * distance;
+                const offsetZ = Math.sin(angle) * distance;
+                
+                boxMesh.position.set(
+                    player.position.x + offsetX,
+                    1,
+                    player.position.z + offsetZ
+                );
+                
+                boxMesh.castShadow = true;
+                boxMesh.receiveShadow = true;
+                scene.add(boxMesh);
+                
+                // Add it to game state
+                gameState.world.buildings.push({
+                    id: storageId,
+                    type: 'storageBox',
+                    mesh: boxMesh,
+                    position: {
+                        x: boxMesh.position.x,
+                        z: boxMesh.position.z
+                    },
+                    items: [] // Empty storage initially
+                });
+                
+                // Remove the storage box from inventory
+                gameState.inventory.splice(inventoryIndex, 1);
+                
+                // Update quick slots
+                gameState.quickSlots[quickSlotIndex] = null;
+                updateQuickSlots();
+                
+                showNotification('Placed Storage Box');
+            }
+            
+            // Animal AI
+            function updateAnimals(deltaTime) {
+                gameState.world.animals.forEach(animal => {
+                    if (animal.health <= 0) return; // Skip dead animals
+                    
+                    const now = Date.now();
+                    
+                    // Only update movement periodically to save performance
+                    if (now - animal.lastMoveTime > 50) {
+                        animal.lastMoveTime = now;
+                        
+                        switch (animal.state) {
+                            case 'wandering':
+                                // Occasionally change direction
+                                if (Math.random() < 0.01) {
+                                    animal.targetPosition = {
+                                        x: animal.group.position.x + (Math.random() * 20 - 10),
+                                        z: animal.group.position.z + (Math.random() * 20 - 10)
+                                    };
+                                }
+                                
+                                // Move towards target if exists
+                                if (animal.targetPosition) {
+                                    const dx = animal.targetPosition.x - animal.group.position.x;
+                                    const dz = animal.targetPosition.z - animal.group.position.z;
+                                    const distance = Math.sqrt(dx * dx + dz * dz);
+                                    
+                                    if (distance > 0.5) {
+                                        // Move towards target
+                                        animal.group.position.x += (dx / distance) * animal.speed;
+                                        animal.group.position.z += (dz / distance) * animal.speed;
+                                        
+                                        // Rotate towards movement direction
+                                        animal.group.rotation.y = Math.atan2(dz, dx);
+                                    } else {
+                                        // Reached target, clear it
+                                        animal.targetPosition = null;
+                                    }
+                                } else {
+                                    // No target, set a new one
+                                    animal.targetPosition = {
+                                        x: animal.group.position.x + (Math.random() * 20 - 10),
+                                        z: animal.group.position.z + (Math.random() * 20 - 10)
+                                    };
+                                }
+                                break;
+                                
+                            case 'fleeing':
+                                // Move towards flee target if exists
+                                if (animal.targetPosition) {
+                                    const dx = animal.targetPosition.x - animal.group.position.x;
+                                    const dz = animal.targetPosition.z - animal.group.position.z;
+                                    const distance = Math.sqrt(dx * dx + dz * dz);
+                                    
+                                    if (distance > 0.5) {
+                                        // Move towards target at faster speed
+                                        animal.group.position.x += (dx / distance) * animal.speed * 1.5;
+                                        animal.group.position.z += (dz / distance) * animal.speed * 1.5;
+                                        
+                                        // Rotate towards movement direction
+                                        animal.group.rotation.y = Math.atan2(dz, dx);
+                                    } else {
+                                        // Reached flee target, return to wandering
+                                        animal.state = 'wandering';
+                                        animal.targetPosition = null;
+                                    }
+                                }
+                                break;
+                        }
+                        
+                        // Check world boundaries
+                        const worldLimit = gameState.settings.worldSize * 0.9;
+                        if (Math.abs(animal.group.position.x) > worldLimit || 
+                            Math.abs(animal.group.position.z) > worldLimit) {
+                            // Turn back towards center
+                            animal.targetPosition = {
+                                x: 0,
+                                z: 0
+                            };
+                        }
+                    }
+                });
+            }
+            
+            // Game loop with time-based updates
+            function gameLoop() {
+                const currentTime = Date.now();
+                const deltaTime = (currentTime - lastTime) / 1000; // Time in seconds
+                lastTime = currentTime;
+                
+                // Update animals
+                updateAnimals(deltaTime);
+                
+                // Update day/night cycle
+                if (gameState.time.dayNightCycle) {
+                    gameState.time.current += deltaTime;
+                    
+                    // Reset day time if needed
+                    if (gameState.time.current > gameState.time.dayLength) {
+                        gameState.time.current = 0;
+                    }
+                    
+                    // Calculate day progress (0-1)
+                    const dayProgress = gameState.time.current / gameState.time.dayLength;
+                    
+                    // Update lighting
+                    updateDayNightLighting(dayProgress);
+                }
+                
+                // Update player status
+                updatePlayerStatus(deltaTime);
+                
+                // Render scene
+                renderer.render(scene, camera);
+                
+                // Continue loop
+                requestAnimationFrame(gameLoop);
+            }
+            
+            function updateDayNightLighting(dayProgress) {
+                // Simple day-night cycle
+                // 0.0-0.25: night to sunrise
+                // 0.25-0.75: day
+                // 0.75-1.0: sunset to night
+                
+                let intensity, skyColor;
+                
+                if (dayProgress < 0.25) {
+                    // Night to sunrise
+                    const t = dayProgress / 0.25;
+                    intensity = 0.1 + t * 0.7;
+                    skyColor = new THREE.Color().setHSL(0.1, 0.5, t * 0.5 + 0.1);
+                } else if (dayProgress < 0.75) {
+                    // Day
+                    intensity = 0.8;
+                    skyColor = new THREE.Color(0x87CEEB); // Sky blue
+                } else {
+                    // Sunset to night
+                    const t = (dayProgress - 0.75) / 0.25;
+                    intensity = 0.8 - t * 0.7;
+                    skyColor = new THREE.Color().setHSL(0.1, 0.5, 0.6 - t * 0.5);
+                }
+                
+                // Update lighting
+                directionalLight.intensity = intensity;
+                scene.background = skyColor;
+            }
+            
+            function updatePlayerStatus(deltaTime) {
+                // Decrease hunger and thirst over time
+                gameState.player.hunger -= 0.1 * deltaTime;
+                gameState.player.thirst -= 0.15 * deltaTime;
+                
+                // Clamp values
+                gameState.player.hunger = Math.max(0, Math.min(100, gameState.player.hunger));
+                gameState.player.thirst = Math.max(0, Math.min(100, gameState.player.thirst));
+                
+                // If hunger or thirst is too low, decrease health
+                if (gameState.player.hunger < 10 || gameState.player.thirst < 10) {
+                    gameState.player.health -= 0.5 * deltaTime;
+                    
+                    if (gameState.player.hunger < 10 && gameState.player.thirst < 10) {
+                        // Both hunger and thirst are critical
+                        gameState.player.health -= 0.5 * deltaTime; // Extra damage
+                    }
+                }
+                
+                // Clamp health
+                gameState.player.health = Math.max(0, Math.min(100, gameState.player.health));
+                
+                // Update UI
+                document.getElementById('healthFill').style.width = `${gameState.player.health}%`;
+                document.getElementById('hungerFill').style.width = `${gameState.player.hunger}%`;
+                document.getElementById('thirstFill').style.width = `${gameState.player.thirst}%`;
+                
+                // Check for game over
+                if (gameState.player.health <= 0) {
+                    showNotification('You died! Refresh the page to restart.', 100000);
+                    // Could add more game over logic here
+                }
+            }
+            
+            function checkInteractions() {
+                const playerPos = player.position;
+                
+                // Check for storage boxes
+                gameState.world.buildings.forEach(building => {
+                    if (building.type === 'storageBox') {
+                        const distance = Math.sqrt(
+                            Math.pow(playerPos.x - building.position.x, 2) + 
+                            Math.pow(playerPos.z - building.position.z, 2)
+                        );
+                        
+                        if (distance < 3) {
+                            // Player is near a storage box
+                            if (!building.highlighted) {
+                                // Highlight the box
+                                building.mesh.material.color.set(0xA0522D);
+                                building.highlighted = true;
+                                
+                                showNotification('Press E to open storage', 1000);
+                            }
+                            
+                            // Check for key press
+                            document.addEventListener('keydown', function onKeyDown(event) {
+                                if (event.key === 'e' || event.key === 'E') {
+                                    document.removeEventListener('keydown', onKeyDown);
+                                    openStorage(building.id);
+                                }
+                            });
+                        } else if (building.highlighted) {
+                            // Remove highlight
+                            building.mesh.material.color.set(0x8B4513);
+                            building.highlighted = false;
+                        }
+                    }
+                });
+                
+                // Check for resources (barrels)
+                gameState.world.resources.forEach(resource => {
+                    if (resource.type === 'barrel' && !resource.looted) {
+                        const distance = Math.sqrt(
+                            Math.pow(playerPos.x - resource.position.x, 2) + 
+                            Math.pow(playerPos.z - resource.position.z, 2)
+                        );
+                        
+                        if (distance < 3) {
+                            // Player is near a barrel
+                            if (!resource.highlighted) {
+                                // Highlight the barrel
+                                resource.mesh.material.color.set(0xA0522D);
+                                resource.highlighted = true;
+                                
+                                showNotification('Press E to search barrel', 1000);
+                            }
+                            
+                            // Check for key press
+                            document.addEventListener('keydown', function onKeyDown(event) {
+                                if (event.key === 'e' || event.key === 'E') {
+                                    document.removeEventListener('keydown', onKeyDown);
+                                    searchNearestBarrel();
+                                }
+                            });
+                        } else if (resource.highlighted) {
+                            // Remove highlight
+                            resource.mesh.material.color.set(0x8B4513);
+                            resource.highlighted = false;
+                        }
+                    }
+                });
+            }
+            
+            // Initialize the game
+            let lastTime = Date.now();
+            
+            // Finish initialization
+            function finishInitialization() {
+                // Generate world
+                generateWorld();
+                
+                // Setup UI
+                setupUI();
+                
+                // Add event listeners for window resize
+                window.addEventListener('resize', () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+                
+                // Hide loading screen
+                updateProgress(100, 'Game loaded!');
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').style.display = 'none';
+                }, 1000);
+                
+                // Start game loop
+                gameLoop();
+                
+                // Add interaction check to the game loop
+                setInterval(checkInteractions, 200);
+            }
+            
+            // Additional initialization
+            updateProgress(80, 'Finalizing game setup...');
+            setTimeout(finishInitialization, 500);
+        }
+    </script>
+</body>
+</html>
