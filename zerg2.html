@@ -1,0 +1,1593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StarCraft Clone</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: #8cb3ff;
+            font-family: 'Arial', sans-serif;
+        }
+        #selectionBox {
+            position: absolute;
+            border: 1px solid #00ff00;
+            background-color: rgba(0, 255, 0, 0.1);
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        .label {
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            padding: 2px 4px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid #8cb3ff;
+            border-radius: 3px;
+            position: absolute;
+            pointer-events: none;
+            white-space: nowrap;
+            z-index: 5;
+            text-align: center;
+        }
+        .building-label {
+            color: #8cb3ff;
+        }
+        .unit-label {
+            color: #ffffff;
+        }
+        .resource-label {
+            color: #00ffff;
+        }
+        .enemy-label {
+            color: #ff6666;
+        }
+        #infoPanel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+        #resources {
+            display: flex;
+            gap: 20px;
+        }
+        #minimap {
+            position: absolute;
+            bottom: 60px;
+            right: 10px;
+            width: 200px;
+            height: 200px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid #8cb3ff;
+        }
+        #buildMenu {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border: 1px solid #8cb3ff;
+        }
+        button {
+            background-color: #0e2a5c;
+            color: #8cb3ff;
+            border: 1px solid #3a5e8c;
+            margin: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #1e4a9c;
+        }
+        #unitInfo {
+            position: absolute;
+            left: 10px;
+            top: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border: 1px solid #8cb3ff;
+            display: none;
+        }
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        #loadingScreen h1 {
+            font-size: 48px;
+            color: #8cb3ff;
+            margin-bottom: 30px;
+        }
+        .race-selection {
+            display: flex;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .race-card {
+            width: 200px;
+            padding: 20px;
+            background-color: rgba(14, 42, 92, 0.7);
+            border: 2px solid #3a5e8c;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .race-card:hover {
+            background-color: rgba(30, 74, 156, 0.7);
+            transform: scale(1.05);
+        }
+        .selection-title {
+            font-size: 24px;
+            margin-bottom: 30px;
+            color: #8cb3ff;
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingScreen">
+        <h1>STARCRAFT CLONE</h1>
+        <div class="selection-title">Choose Your Race</div>
+        <div class="race-selection">
+            <div class="race-card" onclick="startGame('terran')">
+                <h2>Terran</h2>
+                <p>Human exiles with rugged machinery and adaptability.</p>
+                <p>Strengths: Versatility, defensive capabilities</p>
+            </div>
+            <div class="race-card" onclick="startGame('zerg')">
+                <h2>Zerg</h2>
+                <p>A hive-minded swarm that overwhelms foes with numbers.</p>
+                <p>Strengths: Fast production, mobility</p>
+            </div>
+            <div class="race-card" onclick="startGame('protoss')">
+                <h2>Protoss</h2>
+                <p>Ancient species with psionic abilities and advanced tech.</p>
+                <p>Strengths: Powerful units, shield regeneration</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="gameContainer">
+        <div id="minimap"></div>
+        <div id="infoPanel">
+            <div id="resources">
+                <div>Minerals: <span id="minerals">500</span></div>
+                <div>Vespene Gas: <span id="gas">200</span></div>
+                <div>Supply: <span id="supplyUsed">0</span>/<span id="supplyTotal">10</span></div>
+            </div>
+            <div id="message"></div>
+        </div>
+        <div id="buildMenu">
+            <h3>Build Menu</h3>
+            <div id="buildButtons"></div>
+        </div>
+        <div id="unitInfo">
+            <h3 id="unitName"></h3>
+            <div id="unitStats"></div>
+            <div id="unitCommands"></div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables
+        let scene, camera, renderer, raycaster, mouse;
+        let playerRace, minerals, gas, supplyUsed, supplyTotal;
+        let selectedUnits = [];
+        let allUnits = [];
+        let allBuildings = [];
+        let terrain = [];
+        let resourceNodes = [];
+        let enemyUnits = [];
+        let gameTime = 0;
+        let labels = [];
+        
+        // Selection box variables
+        let isSelecting = false;
+        let selectionStart = { x: 0, y: 0 };
+        let selectionBox = document.createElement('div');
+        
+        // Camera controls
+        let cameraTarget = new THREE.Vector3(0, 0, 0);
+        let cameraSpeed = 15;
+        let keys = { 
+            left: false, 
+            right: false, 
+            up: false, 
+            down: false,
+            edgeScrolling: true
+        };
+        
+        // Race-specific data
+        const raceData = {
+            terran: {
+                color: 0x3a5e8c,
+                buildings: {
+                    'Command Center': { cost: 400, gas: 0, time: 100, size: 3, supply: 10 },
+                    'Barracks': { cost: 150, gas: 0, time: 60, size: 2, supply: 0 },
+                    'Factory': { cost: 200, gas: 100, time: 60, size: 2, supply: 0 },
+                    'Supply Depot': { cost: 100, gas: 0, time: 30, size: 2, supply: 8 }
+                },
+                units: {
+                    'SCV': { cost: 50, gas: 0, time: 15, speed: 0.8, hp: 60, damage: 5, range: 1 },
+                    'Marine': { cost: 50, gas: 0, time: 20, speed: 0.7, hp: 40, damage: 6, range: 4 },
+                    'Firebat': { cost: 50, gas: 25, time: 25, speed: 0.7, hp: 50, damage: 8, range: 2 },
+                    'Vulture': { cost: 75, gas: 0, time: 30, speed: 1.2, hp: 80, damage: 10, range: 5 }
+                }
+            },
+            zerg: {
+                color: 0x8c2a3a,
+                buildings: {
+                    'Hatchery': { cost: 300, gas: 0, time: 100, size: 3, supply: 10 },
+                    'Spawning Pool': { cost: 200, gas: 0, time: 60, size: 2, supply: 0 },
+                    'Hydralisk Den': { cost: 100, gas: 50, time: 60, size: 2, supply: 0 },
+                    'Overlord': { cost: 100, gas: 0, time: 40, size: 1, supply: 8 }
+                },
+                units: {
+                    'Drone': { cost: 50, gas: 0, time: 15, speed: 0.8, hp: 40, damage: 5, range: 1 },
+                    'Zergling': { cost: 25, gas: 0, time: 20, speed: 1.1, hp: 35, damage: 5, range: 1 },
+                    'Hydralisk': { cost: 75, gas: 25, time: 25, speed: 0.7, hp: 80, damage: 10, range: 4 },
+                    'Mutalisk': { cost: 100, gas: 100, time: 30, speed: 1.0, hp: 120, damage: 9, range: 3 }
+                }
+            },
+            protoss: {
+                color: 0xffd700,
+                buildings: {
+                    'Nexus': { cost: 400, gas: 0, time: 100, size: 3, supply: 10 },
+                    'Gateway': { cost: 150, gas: 0, time: 60, size: 2, supply: 0 },
+                    'Cybernetics Core': { cost: 200, gas: 0, time: 60, size: 2, supply: 0 },
+                    'Pylon': { cost: 100, gas: 0, time: 30, size: 1, supply: 8 }
+                },
+                units: {
+                    'Probe': { cost: 50, gas: 0, time: 15, speed: 0.8, hp: 20, shield: 20, damage: 5, range: 1 },
+                    'Zealot': { cost: 100, gas: 0, time: 30, speed: 0.7, hp: 100, shield: 60, damage: 16, range: 1 },
+                    'Dragoon': { cost: 125, gas: 50, time: 35, speed: 0.6, hp: 100, shield: 80, damage: 20, range: 4 },
+                    'High Templar': { cost: 50, gas: 150, time: 50, speed: 0.5, hp: 40, shield: 40, damage: 4, range: 3 }
+                }
+            }
+        };
+
+        // Start the game with the selected race
+        function startGame(race) {
+            playerRace = race;
+            document.getElementById('loadingScreen').style.display = 'none';
+            
+            // Initialize game state
+            minerals = 500;
+            gas = 200;
+            supplyUsed = 0;
+            supplyTotal = 10;
+            updateResourceDisplay();
+            
+            // Setup Three.js scene
+            initScene();
+            createTerrain();
+            populateResources();
+            createBaseBuildings();
+            createInitialUnits();
+            populateEnemies();
+            updateBuildMenu();
+            
+            // Start game loop
+            animate();
+        }
+
+        // Initialize Three.js scene
+        function initScene() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000022);
+            
+            // Camera setup - isometric view
+            const aspect = window.innerWidth / window.innerHeight;
+            camera = new THREE.OrthographicCamera(
+                -10 * aspect, 10 * aspect, 10, -10, 0.1, 1000
+            );
+            camera.position.set(10, 10, 10);
+            camera.lookAt(0, 0, 0);
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('gameContainer').prepend(renderer.domElement);
+            
+            // Raycaster for mouse interactions
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            
+            // Setup selection box
+            selectionBox.id = 'selectionBox';
+            document.getElementById('gameContainer').appendChild(selectionBox);
+            
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('mousedown', onMouseDown);
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+            renderer.domElement.addEventListener('mouseup', onMouseUp);
+            
+            // Keyboard for camera movement
+            window.addEventListener('keydown', (e) => {
+                switch(e.key) {
+                    case 'ArrowLeft':
+                    case 'a': keys.left = true; break;
+                    case 'ArrowRight':
+                    case 'd': keys.right = true; break;
+                    case 'ArrowUp':
+                    case 'w': keys.up = true; break;
+                    case 'ArrowDown':
+                    case 's': keys.down = true; break;
+                    case 'e': keys.edgeScrolling = !keys.edgeScrolling; 
+                              showMessage(keys.edgeScrolling ? "Edge scrolling enabled" : "Edge scrolling disabled");
+                              break;
+                }
+            });
+            
+            window.addEventListener('keyup', (e) => {
+                switch(e.key) {
+                    case 'ArrowLeft':
+                    case 'a': keys.left = false; break;
+                    case 'ArrowRight':
+                    case 'd': keys.right = false; break;
+                    case 'ArrowUp':
+                    case 'w': keys.up = false; break;
+                    case 'ArrowDown':
+                    case 's': keys.down = false; break;
+                }
+            });
+            
+            // Map grid helper
+            const gridHelper = new THREE.GridHelper(50, 50);
+            scene.add(gridHelper);
+        }
+
+        // Create terrain with varying heights
+        function createTerrain() {
+            const geometry = new THREE.PlaneGeometry(50, 50, 50, 50);
+            geometry.rotateX(-Math.PI / 2);
+            
+            // Create height map
+            const vertices = geometry.attributes.position.array;
+            for (let i = 0; i < vertices.length; i += 3) {
+                const x = vertices[i];
+                const z = vertices[i + 2];
+                vertices[i + 1] = Math.sin(x * 0.1) * Math.cos(z * 0.1) * 1.0;
+            }
+            
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x3d5e24,
+                wireframe: false,
+                flatShading: true
+            });
+            
+            const terrain = new THREE.Mesh(geometry, material);
+            scene.add(terrain);
+        }
+
+        // Create resource nodes (minerals and vespene gas)
+        function populateResources() {
+            // Create mineral patches
+            for (let i = 0; i < 8; i++) {
+                const mineralX = -10 + (i % 4) * 2;
+                const mineralZ = -8 + Math.floor(i / 4) * 2;
+                
+                const mineralGeometry = new THREE.BoxGeometry(0.8, 1.2, 0.8);
+                const mineralMaterial = new THREE.MeshStandardMaterial({ color: 0x00a9ff });
+                const mineral = new THREE.Mesh(mineralGeometry, mineralMaterial);
+                
+                mineral.position.set(mineralX, 0.6, mineralZ);
+                mineral.userData = { type: 'mineral', amount: 1500 };
+                
+                scene.add(mineral);
+                resourceNodes.push(mineral);
+                
+                // Create label for the mineral
+                createLabel(mineral, "Minerals", "resource-label");
+            }
+            
+            // Create vespene geysers
+            for (let i = 0; i < 2; i++) {
+                const geyserX = -8 + i * 16;
+                const geyserZ = -5;
+                
+                const geyserGeometry = new THREE.CylinderGeometry(0.8, 1, 0.5, 16);
+                const geyserMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff66 });
+                const geyser = new THREE.Mesh(geyserGeometry, geyserMaterial);
+                
+                geyser.position.set(geyserX, 0.25, geyserZ);
+                geyser.userData = { type: 'vespene', amount: 2000 };
+                
+                scene.add(geyser);
+                resourceNodes.push(geyser);
+                
+                // Create label for the geyser
+                createLabel(geyser, "Vespene Gas", "resource-label");
+            }
+        }
+
+        // Create initial buildings based on player race
+        function createBaseBuildings() {
+            // Determine main base name based on race
+            let mainBase;
+            if (playerRace === 'terran') {
+                mainBase = 'Command Center';
+            } else if (playerRace === 'zerg') {
+                mainBase = 'Hatchery';
+            } else {
+                mainBase = 'Nexus';
+            }
+            
+            // Create main building
+            createBuilding(mainBase, 0, 0);
+            
+            // Create supply building
+            let supplyBuilding;
+            if (playerRace === 'terran') {
+                supplyBuilding = 'Supply Depot';
+            } else if (playerRace === 'zerg') {
+                supplyBuilding = 'Overlord';
+            } else {
+                supplyBuilding = 'Pylon';
+            }
+            
+            createBuilding(supplyBuilding, 4, 0);
+        }
+
+        // Create initial units based on player race
+        function createInitialUnits() {
+            // Create worker units
+            let workerType;
+            if (playerRace === 'terran') {
+                workerType = 'SCV';
+            } else if (playerRace === 'zerg') {
+                workerType = 'Drone';
+            } else {
+                workerType = 'Probe';
+            }
+            
+            for (let i = 0; i < 4; i++) {
+                createUnit(workerType, 2 + i % 2, 2 + Math.floor(i / 2));
+            }
+        }
+
+        // Create enemy units for demo purposes
+        function populateEnemies() {
+            // Choose an enemy race different from player's
+            const races = ['terran', 'zerg', 'protoss'].filter(r => r !== playerRace);
+            const enemyRace = races[Math.floor(Math.random() * races.length)];
+            
+            // Get a combat unit from the enemy race
+            let enemyUnitType;
+            if (enemyRace === 'terran') {
+                enemyUnitType = 'Marine';
+            } else if (enemyRace === 'zerg') {
+                enemyUnitType = 'Zergling';
+            } else {
+                enemyUnitType = 'Zealot';
+            }
+            
+            // Create some enemy units
+            for (let i = 0; i < 6; i++) {
+                const unitX = 10 + Math.random() * 5 - 2.5;
+                const unitZ = 10 + Math.random() * 5 - 2.5;
+                
+                const unitData = raceData[enemyRace].units[enemyUnitType];
+                const unitGeometry = new THREE.BoxGeometry(0.5, 0.8, 0.5);
+                const unitMaterial = new THREE.MeshStandardMaterial({ color: raceData[enemyRace].color });
+                const unit = new THREE.Mesh(unitGeometry, unitMaterial);
+                
+                unit.position.set(unitX, 0.4, unitZ);
+                unit.userData = {
+                    type: 'unit',
+                    race: enemyRace,
+                    name: enemyUnitType,
+                    isEnemy: true,
+                    hp: unitData.hp,
+                    maxHp: unitData.hp,
+                    shield: unitData.shield || 0,
+                    maxShield: unitData.shield || 0,
+                    damage: unitData.damage,
+                    range: unitData.range,
+                    speed: unitData.speed
+                };
+                
+                scene.add(unit);
+                enemyUnits.push(unit);
+                
+                // Create label for the enemy unit
+                createLabel(unit, enemyUnitType, "enemy-label");
+            }
+        }
+
+        // Create a new building
+        function createBuilding(name, x, z) {
+            const buildingData = raceData[playerRace].buildings[name];
+            
+            const size = buildingData.size;
+            const buildingGeometry = new THREE.BoxGeometry(size, size * 0.7, size);
+            const buildingMaterial = new THREE.MeshStandardMaterial({ color: raceData[playerRace].color });
+            const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+            
+            building.position.set(x, size * 0.35, z);
+            building.userData = {
+                type: 'building',
+                race: playerRace,
+                name: name,
+                hp: buildingData.cost * 0.6,
+                maxHp: buildingData.cost * 0.6
+            };
+            
+            // Update supply if this building provides it
+            if (buildingData.supply > 0) {
+                supplyTotal += buildingData.supply;
+                updateResourceDisplay();
+            }
+            
+            scene.add(building);
+            allBuildings.push(building);
+            
+            // Create label for the building
+            createLabel(building, name, 'building-label');
+            
+            return building;
+        }
+
+        // Create a new unit
+        function createUnit(name, x, z) {
+            const unitData = raceData[playerRace].units[name];
+            
+            const unitGeometry = new THREE.BoxGeometry(0.5, 0.8, 0.5);
+            const unitMaterial = new THREE.MeshStandardMaterial({ color: raceData[playerRace].color });
+            const unit = new THREE.Mesh(unitGeometry, unitMaterial);
+            
+            unit.position.set(x, 0.4, z);
+            unit.userData = {
+                type: 'unit',
+                race: playerRace,
+                name: name,
+                isEnemy: false,
+                hp: unitData.hp,
+                maxHp: unitData.hp,
+                shield: unitData.shield || 0,
+                maxShield: unitData.shield || 0,
+                damage: unitData.damage,
+                range: unitData.range,
+                speed: unitData.speed,
+                target: null,
+                path: [],
+                isGathering: false,
+                resourceNode: null,
+                carryingResource: false
+            };
+            
+            // Update supply usage
+            supplyUsed += 1;
+            updateResourceDisplay();
+            
+            scene.add(unit);
+            allUnits.push(unit);
+            
+            // Create label for the unit
+            createLabel(unit, name, 'unit-label');
+            
+            return unit;
+        }
+
+        // Handle window resizing
+        function onWindowResize() {
+            const aspect = window.innerWidth / window.innerHeight;
+            camera.left = -10 * aspect;
+            camera.right = 10 * aspect;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Mouse down handler
+        function onMouseDown(event) {
+            // Calculate mouse position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Update the picking ray with the camera and mouse position
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Right click for actions
+            if (event.button === 2) {
+                handleRightClick();
+                return;
+            }
+            
+            // Left click for selection or starting drag selection
+            if (event.button === 0) {
+                // Start selection box
+                isSelecting = true;
+                selectionStart.x = event.clientX;
+                selectionStart.y = event.clientY;
+                
+                // Create selection box
+                selectionBox.style.left = selectionStart.x + 'px';
+                selectionBox.style.top = selectionStart.y + 'px';
+                selectionBox.style.width = '0px';
+                selectionBox.style.height = '0px';
+                selectionBox.style.display = 'block';
+                
+                // Handle single click selection
+                const intersects = raycaster.intersectObjects(scene.children);
+                
+                if (intersects.length > 0) {
+                    const object = intersects[0].object;
+                    
+                    // Select units
+                    if (object.userData && object.userData.type === 'unit' && !object.userData.isEnemy) {
+                        // Clear previous selection if not holding shift
+                        if (!event.shiftKey) {
+                            selectedUnits.forEach(unit => {
+                                // Remove selection visual cue
+                                unit.material.color.setHex(raceData[playerRace].color);
+                            });
+                            selectedUnits = [];
+                        }
+                        
+                        // Add to selection if not already selected
+                        if (!selectedUnits.includes(object)) {
+                            selectedUnits.push(object);
+                            object.material.color.setHex(0xffffff); // Highlight selected unit
+                            
+                            // Show unit info
+                            showUnitInfo(object);
+                        }
+                    }
+                    // Select buildings
+                    else if (object.userData && object.userData.type === 'building') {
+                        selectedUnits = [];
+                        allUnits.forEach(unit => {
+                            unit.material.color.setHex(raceData[playerRace].color);
+                        });
+                        
+                        showBuildingInfo(object);
+                    }
+                }
+            }
+        }
+
+        // Mouse move handler
+        function onMouseMove(event) {
+            // Update mouse position for hover effects if needed
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Update selection box if selecting
+            if (isSelecting) {
+                const width = event.clientX - selectionStart.x;
+                const height = event.clientY - selectionStart.y;
+                
+                if (width >= 0) {
+                    selectionBox.style.left = selectionStart.x + 'px';
+                    selectionBox.style.width = width + 'px';
+                } else {
+                    selectionBox.style.left = event.clientX + 'px';
+                    selectionBox.style.width = -width + 'px';
+                }
+                
+                if (height >= 0) {
+                    selectionBox.style.top = selectionStart.y + 'px';
+                    selectionBox.style.height = height + 'px';
+                } else {
+                    selectionBox.style.top = event.clientY + 'px';
+                    selectionBox.style.height = -height + 'px';
+                }
+            }
+            
+            // Edge scrolling
+            if (keys.edgeScrolling && !isSelecting) {
+                const edgeSize = 30; // pixels from edge that trigger scrolling
+                const scrollSpeed = cameraSpeed * 0.5;
+                
+                if (event.clientX < edgeSize) keys.left = true;
+                else if (!keys.left) keys.left = false;
+                
+                if (event.clientX > window.innerWidth - edgeSize) keys.right = true;
+                else if (!keys.right) keys.right = false;
+                
+                if (event.clientY < edgeSize) keys.up = true;
+                else if (!keys.up) keys.up = false;
+                
+                if (event.clientY > window.innerHeight - edgeSize) keys.down = true;
+                else if (!keys.down) keys.down = false;
+            }
+        }
+
+        // Mouse up handler
+        function onMouseUp(event) {
+            // Only process left-click releases
+            if (event.button === 0) {
+                // Reset edge scrolling if it was triggered during selection
+                if (keys.edgeScrolling) {
+                    keys.left = false;
+                    keys.right = false;
+                    keys.up = false;
+                    keys.down = false;
+                }
+                
+                // Finish selection box if we were selecting
+                if (isSelecting) {
+                    isSelecting = false;
+                    selectionBox.style.display = 'none';
+                    
+                    // Determine if this was a click or a drag
+                    const width = parseInt(selectionBox.style.width);
+                    const height = parseInt(selectionBox.style.height);
+                    
+                    // If it's a small movement, treat as a click (already handled in mousedown)
+                    if (width < 5 && height < 5) {
+                        // If clicking on empty space (not handled in mousedown because no intersect)
+                        if (event.clientX === selectionStart.x && event.clientY === selectionStart.y) {
+                            // Deselect all if clicking terrain and not holding shift
+                            if (!event.shiftKey) {
+                                selectedUnits.forEach(unit => {
+                                    unit.material.color.setHex(raceData[playerRace].color);
+                                });
+                                selectedUnits = [];
+                                hideUnitInfo();
+                            }
+                        }
+                        return;
+                    }
+                    
+                    // Get selection box dimensions in screen space
+                    const selectionLeft = parseInt(selectionBox.style.left);
+                    const selectionTop = parseInt(selectionBox.style.top);
+                    const selectionRight = selectionLeft + width;
+                    const selectionBottom = selectionTop + height;
+                    
+                    // If not holding shift, clear current selection
+                    if (!event.shiftKey) {
+                        selectedUnits.forEach(unit => {
+                            unit.material.color.setHex(raceData[playerRace].color);
+                        });
+                        selectedUnits = [];
+                    }
+                    
+                    // Check each unit to see if it's in the selection box
+                    allUnits.forEach(unit => {
+                        if (!unit.userData.isEnemy) {
+                            // Project 3D position to screen coordinates
+                            const vector = new THREE.Vector3();
+                            vector.setFromMatrixPosition(unit.matrixWorld);
+                            vector.project(camera);
+                            
+                            const x = (vector.x + 1) / 2 * window.innerWidth;
+                            const y = -(vector.y - 1) / 2 * window.innerHeight;
+                            
+                            // Check if unit is within selection box
+                            if (x >= selectionLeft && x <= selectionRight &&
+                                y >= selectionTop && y <= selectionBottom) {
+                                
+                                // Add to selection if not already selected
+                                if (!selectedUnits.includes(unit)) {
+                                    selectedUnits.push(unit);
+                                    unit.material.color.setHex(0xffffff); // Highlight selected unit
+                                }
+                            }
+                        }
+                    });
+                    
+                    // Show info for the last selected unit if any were selected
+                    if (selectedUnits.length > 0) {
+                        showUnitInfo(selectedUnits[selectedUnits.length - 1]);
+                    } else {
+                        hideUnitInfo();
+                    }
+                }
+            }
+        }
+        
+        // Handle right click actions
+        function handleRightClick() {
+            if (selectedUnits.length === 0) return;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(scene.children);
+            
+            if (intersects.length > 0) {
+                const target = intersects[0].object;
+                const point = intersects[0].point;
+                
+                // Attack enemy unit
+                if (target.userData && target.userData.type === 'unit' && target.userData.isEnemy) {
+                    selectedUnits.forEach(unit => {
+                        unit.userData.target = target;
+                        // Stop gathering
+                        unit.userData.isGathering = false;
+                        unit.userData.resourceNode = null;
+                    });
+                    
+                    showMessage("Attacking enemy " + target.userData.name + "!");
+                }
+                // Gather resources
+                else if (target.userData && (target.userData.type === 'mineral' || target.userData.type === 'vespene')) {
+                    // Only workers can gather
+                    const workers = selectedUnits.filter(unit => 
+                        unit.userData.name === 'SCV' || 
+                        unit.userData.name === 'Drone' || 
+                        unit.userData.name === 'Probe'
+                    );
+                    
+                    if (workers.length > 0) {
+                        workers.forEach(worker => {
+                            worker.userData.isGathering = true;
+                            worker.userData.resourceNode = target;
+                            worker.userData.target = null;
+                        });
+                        
+                        showMessage("Gathering " + target.userData.type + "!");
+                    } else {
+                        showMessage("Only workers can gather resources!");
+                    }
+                }
+                // Move to position
+                else {
+                    selectedUnits.forEach(unit => {
+                        unit.userData.path = [new THREE.Vector3(point.x, 0.4, point.z)];
+                        // Slightly offset each unit's destination to avoid stacking
+                        unit.userData.path[0].x += (Math.random() - 0.5) * 2;
+                        unit.userData.path[0].z += (Math.random() - 0.5) * 2;
+                        
+                        unit.userData.target = null;
+                        unit.userData.isGathering = false;
+                        unit.userData.resourceNode = null;
+                    });
+                    
+                    showMessage("Moving to position!");
+                }
+            }
+        }
+
+        // Show unit information panel
+        function showUnitInfo(unit) {
+            const unitInfo = document.getElementById('unitInfo');
+            const unitName = document.getElementById('unitName');
+            const unitStats = document.getElementById('unitStats');
+            const unitCommands = document.getElementById('unitCommands');
+            
+            unitInfo.style.display = 'block';
+            unitName.textContent = unit.userData.name;
+            
+            let statsHtml = `
+                <p>HP: ${unit.userData.hp}/${unit.userData.maxHp}</p>
+                <p>Damage: ${unit.userData.damage}</p>
+                <p>Range: ${unit.userData.range}</p>
+                <p>Speed: ${unit.userData.speed}</p>
+            `;
+            
+            if (unit.userData.shield) {
+                statsHtml += `<p>Shield: ${unit.userData.shield}/${unit.userData.maxShield}</p>`;
+            }
+            
+            unitStats.innerHTML = statsHtml;
+            
+            // Add unit-specific commands
+            unitCommands.innerHTML = '<button onclick="attackMove()">Attack Move</button>';
+            
+            if (unit.userData.name === 'SCV' || unit.userData.name === 'Drone' || unit.userData.name === 'Probe') {
+                unitCommands.innerHTML += '<button onclick="buildStructure()">Build</button>';
+            }
+        }
+
+        // Show building information
+        function showBuildingInfo(building) {
+            const unitInfo = document.getElementById('unitInfo');
+            const unitName = document.getElementById('unitName');
+            const unitStats = document.getElementById('unitStats');
+            const unitCommands = document.getElementById('unitCommands');
+            
+            unitInfo.style.display = 'block';
+            unitName.textContent = building.userData.name;
+            
+            unitStats.innerHTML = `
+                <p>HP: ${building.userData.hp}/${building.userData.maxHp}</p>
+            `;
+            
+            // Add building-specific commands based on building type
+            let commands = '';
+            
+            if (building.userData.name === 'Command Center' || building.userData.name === 'Nexus' || building.userData.name === 'Hatchery') {
+                const workerType = playerRace === 'terran' ? 'SCV' : playerRace === 'zerg' ? 'Drone' : 'Probe';
+                commands += `<button onclick="trainUnit('${workerType}')">Train ${workerType}</button>`;
+            }
+            
+            if (building.userData.name === 'Barracks' || building.userData.name === 'Gateway' || building.userData.name === 'Spawning Pool') {
+                const basicUnit = playerRace === 'terran' ? 'Marine' : playerRace === 'zerg' ? 'Zergling' : 'Zealot';
+                commands += `<button onclick="trainUnit('${basicUnit}')">Train ${basicUnit}</button>`;
+            }
+            
+            unitCommands.innerHTML = commands;
+        }
+
+        // Hide unit information panel
+        function hideUnitInfo() {
+            document.getElementById('unitInfo').style.display = 'none';
+        }
+
+        // Update UI display of resources
+        function updateResourceDisplay() {
+            document.getElementById('minerals').textContent = minerals;
+            document.getElementById('gas').textContent = gas;
+            document.getElementById('supplyUsed').textContent = supplyUsed;
+            document.getElementById('supplyTotal').textContent = supplyTotal;
+        }
+
+        // Show a temporary message
+        function showMessage(text) {
+            const messageElement = document.getElementById('message');
+            messageElement.textContent = text;
+            
+            // Clear message after 3 seconds
+            setTimeout(() => {
+                messageElement.textContent = '';
+            }, 3000);
+        }
+
+        // Update build menu based on player race
+        function updateBuildMenu() {
+            const buildButtons = document.getElementById('buildButtons');
+            buildButtons.innerHTML = '';
+            
+            const buildings = raceData[playerRace].buildings;
+            
+            for (const [name, data] of Object.entries(buildings)) {
+                const button = document.createElement('button');
+                button.textContent = name + ' (' + data.cost + 'm/' + data.gas + 'g)';
+                button.onclick = function() {
+                    buildStructure(name);
+                };
+                buildButtons.appendChild(button);
+            }
+        }
+
+        // Attack move command (used by UI button)
+        function attackMove() {
+            showMessage("Attack-move command issued!");
+            
+            // This would normally set units to attack-move state
+            // For simplicity, we'll just scan for nearby enemies
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(scene.children);
+            
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                
+                // Find closest enemy unit to the clicked position
+                let closestEnemy = null;
+                let closestDistance = Infinity;
+                
+                enemyUnits.forEach(enemy => {
+                    const distance = enemy.position.distanceTo(point);
+                    if (distance < closestDistance) {
+                        closestDistance = distance;
+                        closestEnemy = enemy;
+                    }
+                });
+                
+                // Attack if we found an enemy
+                if (closestEnemy && closestDistance < 10) {
+                    selectedUnits.forEach(unit => {
+                        unit.userData.target = closestEnemy;
+                        unit.userData.isGathering = false;
+                        unit.userData.resourceNode = null;
+                    });
+                } else {
+                    // Just move to the position if no enemies nearby
+                    selectedUnits.forEach(unit => {
+                        unit.userData.path = [new THREE.Vector3(point.x, 0.4, point.z)];
+                        unit.userData.path[0].x += (Math.random() - 0.5) * 2;
+                        unit.userData.path[0].z += (Math.random() - 0.5) * 2;
+                        unit.userData.target = null;
+                    });
+                }
+            }
+        }
+
+        // Build structure command (used by UI button)
+        function buildStructure(buildingName) {
+            // Check if we have required resources
+            const building = raceData[playerRace].buildings[buildingName];
+            
+            if (minerals < building.cost || gas < building.gas) {
+                showMessage("Not enough resources!");
+                return;
+            }
+            
+            // Get a random position near the player's base
+            const x = (Math.random() - 0.5) * 10;
+            const z = (Math.random() - 0.5) * 10;
+            
+            // Create the building
+            createBuilding(buildingName, x, z);
+            
+            // Deduct resources
+            minerals -= building.cost;
+            gas -= building.gas;
+            updateResourceDisplay();
+            
+            showMessage(buildingName + " constructed!");
+        }
+
+        // Train unit command (used by UI button)
+        function trainUnit(unitName) {
+            // Check if we have required resources and supply
+            const unit = raceData[playerRace].units[unitName];
+            
+            if (minerals < unit.cost || gas < unit.gas) {
+                showMessage("Not enough resources!");
+                return;
+            }
+            
+            if (supplyUsed + 1 > supplyTotal) {
+                showMessage("Not enough supply!");
+                return;
+            }
+            
+            // Get a random position near the player's base
+            const x = (Math.random() - 0.5) * 8;
+            const z = (Math.random() - 0.5) * 8;
+            
+            // Create the unit
+            createUnit(unitName, x, z);
+            
+            // Deduct resources
+            minerals -= unit.cost;
+            gas -= unit.gas;
+            updateResourceDisplay();
+            
+            showMessage(unitName + " trained!");
+        }
+
+        // Update unit movement and actions
+        function updateUnits(delta) {
+            allUnits.forEach(unit => {
+                // Skip dead units
+                if (unit.userData.hp <= 0) return;
+                
+                // Movement
+                if (unit.userData.path && unit.userData.path.length > 0) {
+                    const targetPos = unit.userData.path[0];
+                    const direction = new THREE.Vector3().subVectors(targetPos, unit.position).normalize();
+                    const speed = unit.userData.speed;
+                    
+                    // Move toward target
+                    unit.position.x += direction.x * speed * delta;
+                    unit.position.z += direction.z * speed * delta;
+                    
+                    // Check if we've reached the target
+                    const distance = unit.position.distanceTo(targetPos);
+                    if (distance < 0.5) {
+                        unit.userData.path.shift();
+                    }
+                }
+                
+                // Resource gathering
+                if (unit.userData.isGathering && unit.userData.resourceNode) {
+                    const resourceNode = unit.userData.resourceNode;
+                    const distance = unit.position.distanceTo(resourceNode.position);
+                    
+                    // If carrying resource and near base, deposit it
+                    if (unit.userData.carryingResource) {
+                        // Find closest base building
+                        let closestBase = null;
+                        let closestDistance = Infinity;
+                        
+                        allBuildings.forEach(building => {
+                            if (building.userData.name === 'Command Center' || 
+                                building.userData.name === 'Hatchery' || 
+                                building.userData.name === 'Nexus') {
+                                
+                                const dist = unit.position.distanceTo(building.position);
+                                if (dist < closestDistance) {
+                                    closestDistance = dist;
+                                    closestBase = building;
+                                }
+                            }
+                        });
+                        
+                        // If near base, deposit resources
+                        if (closestBase && unit.position.distanceTo(closestBase.position) < 3) {
+                            if (resourceNode.userData.type === 'mineral') {
+                                minerals += 8;
+                            } else {
+                                gas += 8;
+                            }
+                            updateResourceDisplay();
+                            unit.userData.carryingResource = false;
+                            
+                            // Go back to resource node
+                            unit.userData.path = [new THREE.Vector3(resourceNode.position.x, 0.4, resourceNode.position.z)];
+                        } else if (closestBase) {
+                            // Move toward base
+                            unit.userData.path = [new THREE.Vector3(closestBase.position.x, 0.4, closestBase.position.z)];
+                        }
+                    }
+                    // If near resource and not carrying, gather it
+                    else if (distance < 1.5 && resourceNode.userData.amount > 0) {
+                        resourceNode.userData.amount -= 1;
+                        unit.userData.carryingResource = true;
+                        
+                        // Flash the resource node to show gathering
+                        const originalColor = resourceNode.material.color.clone();
+                        resourceNode.material.color.setHex(0xffffff);
+                        setTimeout(() => {
+                            resourceNode.material.color.copy(originalColor);
+                        }, 100);
+                        
+                        // Find closest base to return to
+                        let closestBase = null;
+                        let closestDistance = Infinity;
+                        
+                        allBuildings.forEach(building => {
+                            if (building.userData.name === 'Command Center' || 
+                                building.userData.name === 'Hatchery' || 
+                                building.userData.name === 'Nexus') {
+                                
+                                const dist = unit.position.distanceTo(building.position);
+                                if (dist < closestDistance) {
+                                    closestDistance = dist;
+                                    closestBase = building;
+                                }
+                            }
+                        });
+                        
+                        if (closestBase) {
+                            unit.userData.path = [new THREE.Vector3(closestBase.position.x, 0.4, closestBase.position.z)];
+                        }
+                    }
+                    // If not at resource and not carrying, move toward it
+                    else if (!unit.userData.carryingResource && distance > 1.5) {
+                        unit.userData.path = [new THREE.Vector3(resourceNode.position.x, 0.4, resourceNode.position.z)];
+                    }
+                }
+                
+                // Combat targeting
+                if (unit.userData.target) {
+                    const target = unit.userData.target;
+                    
+                    // Skip if target is dead
+                    if (target.userData.hp <= 0) {
+                        unit.userData.target = null;
+                        return;
+                    }
+                    
+                    const distance = unit.position.distanceTo(target.position);
+                    const attackRange = unit.userData.range;
+                    
+                    // Move toward target if out of range
+                    if (distance > attackRange) {
+                        const direction = new THREE.Vector3().subVectors(target.position, unit.position).normalize();
+                        const speed = unit.userData.speed;
+                        
+                        unit.position.x += direction.x * speed * delta;
+                        unit.position.z += direction.z * speed * delta;
+                    }
+                    // Attack if in range
+                    else {
+                        // Simple attack cooldown (1 second)
+                        if (!unit.userData.lastAttack || (gameTime - unit.userData.lastAttack) > 1) {
+                            // Deal damage to target
+                            if (target.userData.shield && target.userData.shield > 0) {
+                                target.userData.shield -= unit.userData.damage;
+                                if (target.userData.shield < 0) {
+                                    target.userData.hp += target.userData.shield;
+                                    target.userData.shield = 0;
+                                }
+                            } else {
+                                target.userData.hp -= unit.userData.damage;
+                            }
+                            
+                            // Visual effect for attack
+                            const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+                                new THREE.Vector3(unit.position.x, unit.position.y, unit.position.z),
+                                new THREE.Vector3(target.position.x, target.position.y, target.position.z)
+                            ]);
+                            
+                            const lineMaterial = new THREE.LineBasicMaterial({ 
+                                color: playerRace === 'protoss' ? 0x00ffff : 0xff0000,
+                                linewidth: 2
+                            });
+                            
+                            const attackLine = new THREE.Line(lineGeometry, lineMaterial);
+                            scene.add(attackLine);
+                            
+                            // Remove attack line after a short delay
+                            setTimeout(() => {
+                                scene.remove(attackLine);
+                            }, 100);
+                            
+                            // Update attack cooldown
+                            unit.userData.lastAttack = gameTime;
+                            
+                            // Check if target is destroyed
+                            if (target.userData.hp <= 0) {
+                                // Handle unit death
+                                scene.remove(target);
+                                
+                                // Remove the label
+                                if (target.userData.label) {
+                                    document.getElementById('gameContainer').removeChild(target.userData.label);
+                                    // Remove from labels array
+                                    labels = labels.filter(l => l.object !== target);
+                                }
+                                
+                                // Remove from appropriate array
+                                if (target.userData.isEnemy) {
+                                    enemyUnits = enemyUnits.filter(u => u !== target);
+                                } else {
+                                    allUnits = allUnits.filter(u => u !== target);
+                                    supplyUsed -= 1;
+                                    updateResourceDisplay();
+                                }
+                                
+                                unit.userData.target = null;
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Enemy AI behavior
+            enemyUnits.forEach(enemy => {
+                // Skip dead units
+                if (enemy.userData.hp <= 0) return;
+                
+                // Simple AI: attack nearby player units
+                if (!enemy.userData.target || enemy.userData.target.userData.hp <= 0) {
+                    // Find closest player unit
+                    let closestUnit = null;
+                    let closestDistance = Infinity;
+                    
+                    allUnits.forEach(unit => {
+                        const distance = enemy.position.distanceTo(unit.position);
+                        if (distance < closestDistance && distance < 8) {
+                            closestDistance = distance;
+                            closestUnit = unit;
+                        }
+                    });
+                    
+                    // Set as target if found
+                    if (closestUnit) {
+                        enemy.userData.target = closestUnit;
+                    } else {
+                        // Random movement if no targets nearby
+                        if (!enemy.userData.path || enemy.userData.path.length === 0) {
+                            const randomX = enemy.position.x + (Math.random() - 0.5) * 5;
+                            const randomZ = enemy.position.z + (Math.random() - 0.5) * 5;
+                            enemy.userData.path = [new THREE.Vector3(randomX, 0.4, randomZ)];
+                        }
+                    }
+                }
+                
+                // Movement
+                if (enemy.userData.path && enemy.userData.path.length > 0) {
+                    const targetPos = enemy.userData.path[0];
+                    const direction = new THREE.Vector3().subVectors(targetPos, enemy.position).normalize();
+                    const speed = enemy.userData.speed || 0.5;
+                    
+                    // Move toward target
+                    enemy.position.x += direction.x * speed * delta;
+                    enemy.position.z += direction.z * speed * delta;
+                    
+                    // Check if we've reached the target
+                    const distance = enemy.position.distanceTo(targetPos);
+                    if (distance < 0.5) {
+                        enemy.userData.path.shift();
+                    }
+                }
+                
+                // Targeting logic (similar to player units)
+                if (enemy.userData.target) {
+                    const target = enemy.userData.target;
+                    
+                    // Skip if target is dead
+                    if (target.userData.hp <= 0) {
+                        enemy.userData.target = null;
+                        return;
+                    }
+                    
+                    const distance = enemy.position.distanceTo(target.position);
+                    const attackRange = enemy.userData.range || 3;
+                    
+                    // Move toward target if out of range
+                    if (distance > attackRange) {
+                        const direction = new THREE.Vector3().subVectors(target.position, enemy.position).normalize();
+                        const speed = enemy.userData.speed || 0.5;
+                        
+                        enemy.position.x += direction.x * speed * delta;
+                        enemy.position.z += direction.z * speed * delta;
+                    }
+                    // Attack if in range
+                    else {
+                        // Simple attack cooldown (1 second)
+                        if (!enemy.userData.lastAttack || (gameTime - enemy.userData.lastAttack) > 1) {
+                            // Deal damage to target
+                            if (target.userData.shield && target.userData.shield > 0) {
+                                target.userData.shield -= enemy.userData.damage;
+                                if (target.userData.shield < 0) {
+                                    target.userData.hp += target.userData.shield;
+                                    target.userData.shield = 0;
+                                }
+                            } else {
+                                target.userData.hp -= enemy.userData.damage;
+                            }
+                            
+                            // Visual effect for attack
+                            const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+                                new THREE.Vector3(enemy.position.x, enemy.position.y, enemy.position.z),
+                                new THREE.Vector3(target.position.x, target.position.y, target.position.z)
+                            ]);
+                            
+                            const lineMaterial = new THREE.LineBasicMaterial({ 
+                                color: 0xff0000,
+                                linewidth: 2
+                            });
+                            
+                            const attackLine = new THREE.Line(lineGeometry, lineMaterial);
+                            scene.add(attackLine);
+                            
+                            // Remove attack line after a short delay
+                            setTimeout(() => {
+                                scene.remove(attackLine);
+                            }, 100);
+                            
+                            // Update attack cooldown
+                            enemy.userData.lastAttack = gameTime;
+                            
+                            // Check if target is destroyed
+                            if (target.userData.hp <= 0) {
+                                // Handle unit death
+                                scene.remove(target);
+                                
+                                // Remove the label
+                                if (target.userData.label) {
+                                    document.getElementById('gameContainer').removeChild(target.userData.label);
+                                    // Remove from labels array
+                                    labels = labels.filter(l => l.object !== target);
+                                }
+                                
+                                // Remove from player units array
+                                allUnits = allUnits.filter(u => u !== target);
+                                supplyUsed -= 1;
+                                updateResourceDisplay();
+                                
+                                enemy.userData.target = null;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update minimap
+        function updateMinimap() {
+            const minimap = document.getElementById('minimap');
+            // Create the canvas context if it doesn't exist
+            if (!minimap.getContext) {
+                minimap.width = 200;
+                minimap.height = 200;
+            }
+            
+            const context = minimap.getContext('2d');
+            
+            // Clear minimap
+            context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            context.fillRect(0, 0, minimap.width, minimap.height);
+            
+            // Draw player units (blue)
+            allUnits.forEach(unit => {
+                const x = (unit.position.x + 25) * (minimap.width / 50);
+                const z = (unit.position.z + 25) * (minimap.height / 50);
+                
+                context.fillStyle = 'blue';
+                context.fillRect(x - 2, z - 2, 4, 4);
+            });
+            
+            // Draw player buildings (larger blue squares)
+            allBuildings.forEach(building => {
+                const x = (building.position.x + 25) * (minimap.width / 50);
+                const z = (building.position.z + 25) * (minimap.height / 50);
+                const size = building.userData.size * 3;
+                
+                context.fillStyle = 'blue';
+                context.fillRect(x - size/2, z - size/2, size, size);
+            });
+            
+            // Draw enemy units (red)
+            enemyUnits.forEach(unit => {
+                const x = (unit.position.x + 25) * (minimap.width / 50);
+                const z = (unit.position.z + 25) * (minimap.height / 50);
+                
+                context.fillStyle = 'red';
+                context.fillRect(x - 2, z - 2, 4, 4);
+            });
+            
+            // Draw resources (minerals = cyan, gas = green)
+            resourceNodes.forEach(node => {
+                const x = (node.position.x + 25) * (minimap.width / 50);
+                const z = (node.position.z + 25) * (minimap.height / 50);
+                
+                context.fillStyle = node.userData.type === 'mineral' ? 'cyan' : 'green';
+                context.fillRect(x - 3, z - 3, 6, 6);
+            });
+            
+            // Draw current camera view area
+            const viewX = (cameraTarget.x + 25) * (minimap.width / 50);
+            const viewZ = (cameraTarget.z + 25) * (minimap.height / 50);
+            const viewWidth = 20 * (minimap.width / 50);
+            const viewHeight = 20 * (minimap.height / 50);
+            
+            context.strokeStyle = 'white';
+            context.lineWidth = 1;
+            context.strokeRect(viewX - viewWidth/2, viewZ - viewHeight/2, viewWidth, viewHeight);
+            
+            // Make minimap clickable for navigation
+            minimap.onclick = function(event) {
+                const rect = minimap.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                
+                // Convert minimap coordinates to world coordinates
+                const worldX = (x / minimap.width * 50) - 25;
+                const worldZ = (y / minimap.height * 50) - 25;
+                
+                // Move camera to clicked position
+                cameraTarget.x = worldX;
+                cameraTarget.z = worldZ;
+                camera.position.x = cameraTarget.x + 10;
+                camera.position.z = cameraTarget.z + 10;
+                camera.lookAt(cameraTarget.x, 0, cameraTarget.z);
+            };
+        }
+
+        // Update camera position based on keys
+        function updateCamera(delta) {
+            let moved = false;
+            
+            // Apply keyboard/edge scrolling movement
+            if (keys.left) {
+                cameraTarget.x -= cameraSpeed * delta;
+                moved = true;
+            }
+            if (keys.right) {
+                cameraTarget.x += cameraSpeed * delta;
+                moved = true;
+            }
+            if (keys.up) {
+                cameraTarget.z -= cameraSpeed * delta;
+                moved = true;
+            }
+            if (keys.down) {
+                cameraTarget.z += cameraSpeed * delta;
+                moved = true;
+            }
+            
+            // Limit camera to map boundaries
+            cameraTarget.x = Math.max(-20, Math.min(20, cameraTarget.x));
+            cameraTarget.z = Math.max(-20, Math.min(20, cameraTarget.z));
+            
+            // Move camera if necessary
+            if (moved) {
+                camera.position.x = cameraTarget.x + 10;
+                camera.position.z = cameraTarget.z + 10;
+                camera.lookAt(cameraTarget.x, 0, cameraTarget.z);
+            }
+        }
+
+        // Create label for an object
+        function createLabel(object, text, className = "label") {
+            const label = document.createElement('div');
+            label.className = `label ${className}`;
+            label.textContent = text;
+            label.style.display = 'none'; // Initially hidden
+            document.getElementById('gameContainer').appendChild(label);
+            
+            // Store reference to DOM element in the object
+            object.userData.label = label;
+            
+            // Add to labels array for updating
+            labels.push({ object: object, element: label });
+            
+            return label;
+        }
+        
+        // Update all labels positions
+        function updateLabels() {
+            labels.forEach(label => {
+                const object = label.object;
+                const element = label.element;
+                
+                // Skip if object was removed
+                if (!object.parent) {
+                    element.style.display = 'none';
+                    return;
+                }
+                
+                // Project position to screen space
+                const vector = new THREE.Vector3();
+                vector.setFromMatrixPosition(object.matrixWorld);
+                vector.project(camera);
+                
+                const x = (vector.x + 1) / 2 * window.innerWidth;
+                const y = -(vector.y - 1) / 2 * window.innerHeight;
+                
+                // Calculate distance from camera for visibility check
+                const objectPos = new THREE.Vector3();
+                object.getWorldPosition(objectPos);
+                const distance = camera.position.distanceTo(objectPos);
+                
+                // Only show label if object is in front of camera and within view distance
+                if (vector.z < 1 && distance < 30) {
+                    element.style.display = '';
+                    element.style.left = `${x - (element.offsetWidth / 2)}px`;
+                    element.style.top = `${y - object.geometry.parameters.height * 15}px`; // Position above the object
+                } else {
+                    element.style.display = 'none';
+                }
+            });
+        }
+
+        // Animation loop
+        let lastTime = 0;
+        function animate(time) {
+            requestAnimationFrame(animate);
+            
+            // Calculate delta time
+            const delta = (time - lastTime) / 1000; // Convert to seconds
+            lastTime = time;
+            gameTime += delta;
+            
+            // Update camera
+            updateCamera(delta);
+            
+            // Update game logic
+            updateUnits(delta);
+            
+            // Update labels position
+            updateLabels();
+            
+            // Render scene
+            renderer.render(scene, camera);
+            
+            // Update minimap
+            updateMinimap();
+        }
+
+        // Prevent context menu on right-click
+        document.addEventListener('contextmenu', event => event.preventDefault());
+    </script>
+</body>
+</html>
