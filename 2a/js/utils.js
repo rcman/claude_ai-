@@ -1,471 +1,113 @@
-// UI controller to handle in-game interface elements
-class UI {
-    constructor(inventory, crafting, player) {
-        this.inventory = inventory;
-        this.crafting = crafting;
-        this.player = player;
-        this.game = null;
-        
-        // UI element references
-        this.quickBarElement = document.getElementById('quick-bar');
-        this.inventoryGridElement = document.getElementById('player-inventory');
-        this.quickBarInventoryElement = document.getElementById('quick-bar-inventory');
-        this.craftingRecipesElement = document.getElementById('crafting-recipes');
-        this.actionTextElement = document.getElementById('action-text');
-        
-        // HUD elements
-        this.healthFillElement = document.getElementById('health-fill');
-        this.hungerFillElement = document.getElementById('hunger-fill');
-        this.thirstFillElement = document.getElementById('thirst-fill');
-        
-        // Setup event listeners
-        this.setupEventListeners();
+// Utility functions for the game
+class Utils {
+    // Generate a random number between min and max (inclusive)
+    static randomRange(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
     }
     
-    setGame(game) {
-        this.game = game;
+    // Clamp a value between min and max
+    static clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
     }
     
-    initialize() {
-        // Set inventory change callback
-        this.inventory.onInventoryChanged = () => this.updateInventoryUI();
-        
-        // Initial UI update
-        this.updateInventoryUI();
-        this.updateHUD();
-        
-        // Show/hide inventory on TAB key
-        document.getElementById('close-inventory').addEventListener('click', () => {
-            document.getElementById('inventory-screen').classList.add('hidden');
-            if (this.player.controls) {
-                this.player.controls.lock();
-            }
-        });
-        
-        // Toggle crafting menu
-        document.getElementById('crafting-button').addEventListener('click', () => {
-            const craftingMenu = document.getElementById('crafting-menu');
-            if (craftingMenu.classList.contains('hidden')) {
-                craftingMenu.classList.remove('hidden');
-                this.updateCraftingUI();
-            } else {
-                craftingMenu.classList.add('hidden');
-            }
-        });
+    // Linear interpolation
+    static lerp(a, b, t) {
+        return a + t * (b - a);
     }
     
-    setupEventListeners() {
-        // Quick bar slot selection
-        document.addEventListener('keydown', (event) => {
-            if (event.code.startsWith('Digit') && !isNaN(parseInt(event.code.slice(-1)))) {
-                const slotNum = parseInt(event.code.slice(-1)) - 1;
-                if (slotNum >= 0 && slotNum < 8) {
-                    this.selectQuickSlot(slotNum);
-                }
-            }
-        });
+    // Convert degrees to radians
+    static degToRad(degrees) {
+        return degrees * Math.PI / 180;
     }
     
-    update() {
-        // Update HUD elements
-        this.updateHUD();
-        
-        // Show action text for interactable objects
-        this.updateActionText();
+    // Convert radians to degrees
+    static radToDeg(radians) {
+        return radians * 180 / Math.PI;
     }
     
-    updateHUD() {
-        // Update health, hunger, and thirst bars
-        if (this.player) {
-            const health = this.player.health;
-            const hunger = this.player.hunger;
-            const thirst = this.player.thirst;
-            
-            this.healthFillElement.style.width = `${health}%`;
-            this.hungerFillElement.style.width = `${hunger}%`;
-            this.thirstFillElement.style.width = `${thirst}%`;
-            
-            // Change colors based on levels
-            if (health < 25) {
-                this.healthFillElement.style.backgroundColor = '#FF0000'; // Red when low
-            } else if (health < 50) {
-                this.healthFillElement.style.backgroundColor = '#FFA500'; // Orange when medium
-            } else {
-                this.healthFillElement.style.backgroundColor = '#e74c3c'; // Default red
-            }
-            
-            if (hunger < 25) {
-                this.hungerFillElement.style.backgroundColor = '#FF0000'; // Red when low
-            } else {
-                this.hungerFillElement.style.backgroundColor = '#f39c12'; // Default orange
-            }
-            
-            if (thirst < 25) {
-                this.thirstFillElement.style.backgroundColor = '#FF0000'; // Red when low
-            } else {
-                this.thirstFillElement.style.backgroundColor = '#3498db'; // Default blue
-            }
-        }
+    // Calculate distance between two Vector3 points
+    static distance(point1, point2) {
+        return Math.sqrt(
+            Math.pow(point2.x - point1.x, 2) +
+            Math.pow(point2.y - point1.y, 2) +
+            Math.pow(point2.z - point1.z, 2)
+        );
     }
     
-    updateActionText() {
-        if (!this.player) return;
-        
-        if (this.player.interactableObject) {
-            const interactable = this.player.interactableObject;
-            
-            let actionText = '';
-            
-            switch (interactable.userData.type) {
-                case 'tree':
-                    actionText = 'Press E to chop tree';
-                    break;
-                case 'rock':
-                    actionText = 'Press E to mine rock';
-                    break;
-                case 'barrel':
-                case 'container':
-                    if (interactable.userData.searched) {
-                        actionText = 'Container already searched';
-                    } else {
-                        actionText = 'Press E to search';
-                    }
-                    break;
-                case 'water':
-                    actionText = 'Press E to collect water';
-                    break;
-                case 'grass':
-                    actionText = 'Press E to harvest grass';
-                    break;
-                case 'animal':
-                    actionText = 'Press E to hunt';
-                    break;
-                case 'scrap':
-                    actionText = 'Press E to collect scrap metal';
-                    break;
-                case 'campfire':
-                    actionText = 'Press E to use campfire';
-                    break;
-                case 'crafting_table':
-                    actionText = 'Press E to use crafting table';
-                    break;
-                case 'forge':
-                    actionText = 'Press E to use forge';
-                    break;
-            }
-            
-            this.showActionText(actionText);
-        } else {
-            this.hideActionText();
-        }
+    // Calculate distance between two Vector2 points (ignoring y)
+    static distance2D(point1, point2) {
+        return Math.sqrt(
+            Math.pow(point2.x - point1.x, 2) +
+            Math.pow(point2.z - point1.z, 2)
+        );
     }
-    
-    showActionText(text) {
-        this.actionTextElement.textContent = text;
-        this.actionTextElement.style.opacity = '1';
-    }
-    
-    hideActionText() {
-        this.actionTextElement.style.opacity = '0';
-    }
-    
-    updateInventoryUI() {
-        // Update quick bar
-        this.updateQuickBar();
+
+    // Implementation of improved Perlin noise for terrain generation
+    static noise(x, z) {
+        // Define permutation table
+        const permTable = new Array(512);
+        const p = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,
+                   140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,
+                   247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,
+                   57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,
+                   74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,
+                   60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,
+                   65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,
+                   200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,
+                   52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,
+                   207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,
+                   119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,
+                   129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,
+                   218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,
+                   81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,
+                   184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,
+                   222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
         
-        // Update inventory grid when inventory screen is open
-        if (!document.getElementById('inventory-screen').classList.contains('hidden')) {
-            this.updateInventoryGrid();
-            this.updateQuickBarInventory();
-            
-            // Update crafting UI if it's visible
-            if (!document.getElementById('crafting-menu').classList.contains('hidden')) {
-                this.updateCraftingUI();
-            }
-        }
-    }
-    
-    updateQuickBar() {
-        // Clear existing slots
-        this.quickBarElement.innerHTML = '';
-        
-        // Create slots
-        for (let i = 0; i < this.inventory.quickSlots.length; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'quick-slot';
-            
-            if (i === this.player.selectedSlot) {
-                slot.classList.add('selected');
-            }
-            
-            const item = this.inventory.quickSlots[i];
-            
-            if (item) {
-                const itemElement = this.createItemElement(item);
-                slot.appendChild(itemElement);
-            }
-            
-            // Add slot number
-            const slotNumber = document.createElement('div');
-            slotNumber.className = 'slot-number';
-            slotNumber.textContent = (i + 1).toString();
-            slot.appendChild(slotNumber);
-            
-            this.quickBarElement.appendChild(slot);
-        }
-    }
-    
-    updateInventoryGrid() {
-        // Clear existing slots
-        this.inventoryGridElement.innerHTML = '';
-        
-        // Create slots
-        for (let i = 0; i < this.inventory.slots.length; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'inventory-slot';
-            slot.dataset.slotIndex = i;
-            slot.dataset.slotType = 'inventory';
-            
-            const item = this.inventory.slots[i];
-            
-            if (item) {
-                const itemElement = this.createItemElement(item);
-                slot.appendChild(itemElement);
-            }
-            
-            // Add event listeners for drag and drop
-            this.addSlotEventListeners(slot);
-            
-            this.inventoryGridElement.appendChild(slot);
-        }
-    }
-    
-    updateQuickBarInventory() {
-        // Clear existing slots
-        this.quickBarInventoryElement.innerHTML = '';
-        
-        // Create slots
-        for (let i = 0; i < this.inventory.quickSlots.length; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'inventory-slot';
-            slot.dataset.slotIndex = i;
-            slot.dataset.slotType = 'quickbar';
-            
-            if (i === this.player.selectedSlot) {
-                slot.classList.add('selected');
-            }
-            
-            const item = this.inventory.quickSlots[i];
-            
-            if (item) {
-                const itemElement = this.createItemElement(item);
-                slot.appendChild(itemElement);
-            }
-            
-            // Add event listeners for drag and drop
-            this.addSlotEventListeners(slot);
-            
-            // Add slot number
-            const slotNumber = document.createElement('div');
-            slotNumber.className = 'slot-number';
-            slotNumber.textContent = (i + 1).toString();
-            slot.appendChild(slotNumber);
-            
-            this.quickBarInventoryElement.appendChild(slot);
-        }
-    }
-    
-    updateCraftingUI() {
-        // Clear existing recipes
-        this.craftingRecipesElement.innerHTML = '';
-        
-        // Refresh craftable items list
-        const recipes = this.crafting.getAllRecipes();
-        
-        // Create recipe elements
-        for (const recipe of recipes) {
-            const recipeElement = document.createElement('div');
-            recipeElement.className = 'crafting-item';
-            
-            if (!recipe.canCraft) {
-                recipeElement.classList.add('unavailable');
-            }
-            
-            // Item icon
-            const item = this.inventory.itemManager.getItem(recipe.itemId);
-            const itemIcon = document.createElement('div');
-            itemIcon.className = 'item-icon';
-            
-            // Set background position for sprite sheet
-            const iconInfo = this.inventory.itemManager.getItemTexture(item);
-            itemIcon.style.backgroundPosition = 
-                `-${iconInfo.col * 32}px -${iconInfo.row * 32}px`;
-            
-            recipeElement.appendChild(itemIcon);
-            
-            // Item name
-            const itemName = document.createElement('div');
-            itemName.className = 'crafting-item-name';
-            itemName.textContent = recipe.name;
-            recipeElement.appendChild(itemName);
-            
-            // Tooltip with recipe details
-            const tooltip = document.createElement('div');
-            tooltip.className = 'tooltip';
-            
-            let tooltipContent = `<strong>${recipe.name}</strong><br>Requires:<br>`;
-            
-            for (const ingredient of recipe.recipe) {
-                const available = this.inventory.countItem(ingredient.itemId);
-                const hasEnough = available >= ingredient.amount;
-                
-                tooltipContent += `<span class="${hasEnough ? 'has-enough' : 'not-enough'}">
-                    ${ingredient.name} x${ingredient.amount} (${available} available)
-                </span><br>`;
-            }
-            
-            tooltip.innerHTML = tooltipContent;
-            recipeElement.appendChild(tooltip);
-            
-            // Craft button
-            if (recipe.canCraft) {
-                recipeElement.addEventListener('click', () => {
-                    this.crafting.craftItem(recipe.itemId);
-                    this.updateInventoryUI();
-                });
-            }
-            
-            this.craftingRecipesElement.appendChild(recipeElement);
-        }
-    }
-    
-    createItemElement(item) {
-        const itemElement = document.createElement('div');
-        itemElement.className = 'item';
-        itemElement.dataset.itemId = item.id;
-        
-        // Item icon
-        const itemIcon = document.createElement('div');
-        itemIcon.className = 'item-icon';
-        
-        // Set background position for sprite sheet
-        const iconInfo = this.inventory.itemManager.getItemTexture(item);
-        itemIcon.style.backgroundPosition = 
-            `-${iconInfo.col * 32}px -${iconInfo.row * 32}px`;
-        
-        itemElement.appendChild(itemIcon);
-        
-        // Item count for stackable items
-        if (item.stackable && item.count > 1) {
-            const itemCount = document.createElement('div');
-            itemCount.className = 'item-count';
-            itemCount.textContent = item.count.toString();
-            itemElement.appendChild(itemCount);
+        // Fill permutation table
+        for (let i = 0; i < 256; i++) {
+            permTable[i] = p[i];
+            permTable[i + 256] = p[i];
         }
         
-        // Tooltip with item details
-        const tooltip = document.createElement('div');
-        tooltip.className = 'tooltip';
-        tooltip.innerHTML = `
-            <strong>${item.name}</strong><br>
-            ${item.description}
-        `;
+        // Floor coordinates
+        const X = Math.floor(x) & 255;
+        const Z = Math.floor(z) & 255;
         
-        // Add durability to tooltip for tools
-        if (item.durability !== null && item.durability !== undefined) {
-            const durabilityPercent = Math.round((item.durability / 100) * 100);
-            tooltip.innerHTML += `<br>Durability: ${durabilityPercent}%`;
-        }
+        // Relative coordinates within unit cube
+        x -= Math.floor(x);
+        z -= Math.floor(z);
         
-        itemElement.appendChild(tooltip);
+        // Compute fade curves
+        const u = this.fade(x);
+        const v = this.fade(z);
         
-        return itemElement;
+        // Hash coordinates of the 4 corners
+        const A = permTable[X] + Z;
+        const AA = permTable[A];
+        const AB = permTable[A + 1];
+        const B = permTable[X + 1] + Z;
+        const BA = permTable[B];
+        const BB = permTable[B + 1];
+        
+        // Blend the 4 corners
+        return this.lerp(
+            this.lerp(this.grad(permTable[AA], x, 0, z), this.grad(permTable[BA], x - 1, 0, z), u),
+            this.lerp(this.grad(permTable[AB], x, 0, z - 1), this.grad(permTable[BB], x - 1, 0, z - 1), u),
+            v
+        );
     }
     
-    addSlotEventListeners(slot) {
-        // Variables to track drag and drop
-        let draggedItem = null;
-        let draggedItemSlot = null;
-        
-        // Mouse down to start drag
-        slot.addEventListener('mousedown', (event) => {
-            // Only handle left click with shift held down
-            if (event.button === 0 && event.shiftKey) {
-                const itemElement = slot.querySelector('.item');
-                
-                if (itemElement) {
-                    draggedItem = itemElement;
-                    draggedItemSlot = slot;
-                    
-                    // Create visual feedback
-                    slot.classList.add('dragging');
-                    
-                    // Prevent default browser drag behavior
-                    event.preventDefault();
-                }
-            }
-        });
-        
-        // Mouse up to end drag
-        document.addEventListener('mouseup', (event) => {
-            if (draggedItem && draggedItemSlot) {
-                // Remove visual feedback
-                draggedItemSlot.classList.remove('dragging');
-                
-                // Get the slot under the mouse
-                const targetSlot = this.getSlotUnderMouse(event);
-                
-                if (targetSlot && targetSlot !== draggedItemSlot) {
-                    // Move item between slots
-                    this.moveItemBetweenSlots(draggedItemSlot, targetSlot);
-                }
-                
-                // Reset drag state
-                draggedItem = null;
-                draggedItemSlot = null;
-            }
-        });
+    // Fade function for Perlin noise
+    static fade(t) {
+        return t * t * t * (t * (t * 6 - 15) + 10);
     }
     
-    getSlotUnderMouse(event) {
-        // Get all elements under the mouse
-        const elements = document.elementsFromPoint(event.clientX, event.clientY);
-        
-        // Find the first element that is an inventory slot
-        for (const element of elements) {
-            if (element.classList.contains('inventory-slot')) {
-                return element;
-            }
-        }
-        
-        return null;
-    }
-    
-    moveItemBetweenSlots(sourceSlot, targetSlot) {
-        // Get slot information
-        const sourceType = sourceSlot.dataset.slotType;
-        const sourceIndex = parseInt(sourceSlot.dataset.slotIndex);
-        
-        const targetType = targetSlot.dataset.slotType;
-        const targetIndex = parseInt(targetSlot.dataset.slotIndex);
-        
-        // Move item in inventory
-        this.inventory.moveItem(sourceType, sourceIndex, targetType, targetIndex);
-        
-        // Update UI
-        this.updateInventoryUI();
-    }
-    
-    selectQuickSlot(slotIndex) {
-        // Update player's selected slot
-        this.player.selectedSlot = slotIndex;
-        
-        // Update UI
-        this.updateQuickBar();
-        
-        // Also update quick bar in inventory screen if open
-        if (!document.getElementById('inventory-screen').classList.contains('hidden')) {
-            this.updateQuickBarInventory();
-        }
+    // Gradient function for Perlin noise
+    static grad(hash, x, y, z) {
+        // Convert lower 4 bits of hash code into 12 gradient directions
+        const h = hash & 15;
+        const u = h < 8 ? x : y;
+        const v = h < 4 ? y : h === 12 || h === 14 ? x : z;
+        return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
     }
 }
