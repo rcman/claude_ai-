@@ -1,0 +1,3 @@
+Write me a 3d Platform but in 2d perspective in html5 and three.min.js game with multiple platforms with multiple ladders between each platform. 
+
+The player can shoot, crawl and climb ladders. Enemies can shoot at the player.
