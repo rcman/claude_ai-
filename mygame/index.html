@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Isometric Survival Game</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="loadingScreen">
+            <h1>Loading Isometric Survival Game</h1>
+            <div id="progressBar">
+                <div id="progressFill"></div>
+            </div>
+            <div id="loadingText">Checking compatibility...</div>
+        </div>
+
+        <div id="statusBar">
+            <div class="statusMeter">
+                <div id="healthFill" class="statusFill"></div>
+                <div class="statusLabel">Health</div>
+            </div>
+            <div class="statusMeter">
+                <div id="hungerFill" class="statusFill"></div>
+                <div class="statusLabel">Hunger</div>
+            </div>
+            <div class="statusMeter">
+                <div id="thirstFill" class="statusFill"></div>
+                <div class="statusLabel">Thirst</div>
+            </div>
+        </div>
+
+        <div id="quickSlots">
+            <!-- Quick slots will be populated by JS -->
+            <div class="quickSlot" data-index="0"><div class="slotNumber">1</div></div>
+            <div class="quickSlot" data-index="1"><div class="slotNumber">2</div></div>
+            <div class="quickSlot" data-index="2"><div class="slotNumber">3</div></div>
+            <div class="quickSlot" data-index="3"><div class="slotNumber">4</div></div>
+            <div class="quickSlot" data-index="4"><div class="slotNumber">5</div></div>
+            <div class="quickSlot" data-index="5"><div class="slotNumber">6</div></div>
+        </div>
+
+        <div id="inventory">
+            <div id="inventoryTitle">Inventory</div>
+            <div id="inventoryContent"></div>
+        </div>
+
+        <div id="craftingMenu">
+            <div id="craftingTitle">Crafting</div>
+            <!-- Craft items will be populated by JS -->
+        </div>
+
+        <div id="storageBox">
+            <div id="storageTitle">Storage Box</div>
+            <div id="storageContainer">
+                <div id="storageContent"></div>
+                <div class="divider"></div>
+                <div id="inventoryForStorage"></div>
+            </div>
+        </div>
+
+        <div id="notification"></div>
+
+        <!-- Popup for Adding Resources -->
+        <div id="addResourcePopup" class="popup">
+            <h2>Add Resource to Inventory</h2>
+            <label for="resourceIdInput">Resource ID:</label>
+            <input type="text" id="resourceIdInput" placeholder="e.g., wood, stone, nails">
+
+            <label for="resourceCountInput">Count:</label>
+            <input type="number" id="resourceCountInput" value="1" min="1">
+
+            <button id="addResourceBtn">Add Resource</button>
+            <button class="close-btn" onclick="closePopup('addResourcePopup')">Close</button>
+        </div>
+
+        <!-- Popup for Editing Crafting Costs -->
+        <div id="editCraftingPopup" class="popup">
+            <h2>Edit Crafting Recipe</h2>
+            <label for="craftingItemSelect">Select Item:</label>
+            <select id="craftingItemSelect"></select>
+
+            <label>Required Resources:</label>
+            <div id="editCraftingRequirements">
+                <!-- Requirements will be loaded here -->
+            </div>
+            <button id="addNewReqBtn">Add New Requirement</button>
+            <br><br>
+
+            <button id="saveCraftingBtn">Save Changes</button>
+            <button class="close-btn" onclick="closePopup('editCraftingPopup')">Close</button>
+        </div>
+    </div>
+
+    <!-- Load scripts in proper order -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/resources.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/worldgen.js"></script>
+    <script src="js/food-water.js"></script>
+    <script src="js/tooltip.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/inventory.js"></script>
+    <script src="js/crafting.js"></script>
+    <script src="js/actions.js"></script>
+    <script src="js/animals.js"></script>
+    <script src="js/game.js"></script>
+    
+    <!-- This loads and initializes the game -->
+    <script src="js/init.js"></script>
+</body>
+</html>
