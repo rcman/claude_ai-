@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D First-Person Shooter</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            font-size: 20px;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 24px;
+            user-select: none;
+            pointer-events: none;
+        }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+            display: none;
+        }
+        #startButton {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        #startButton:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div id="score">Score: 0</div>
+        <div id="health">Health: 100</div>
+        <div id="status">STANDING</div>
+    </div>
+    <div id="crosshair">+</div>
+    <div id="message">
+        <h2>3D First-Person Shooter</h2>
+        <p>Click to start the game</p>
+        <p>WASD to move, MOUSE to look, CLICK to shoot, C to crouch</p>
+        <button id="startButton">START GAME</button>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game state
+        let score = 0;
+        let health = 100;
+        let isCrouching = false;
+        let isGameActive = false;
+        
+        // Show start message
+        document.getElementById('message').style.display = 'block';
+        
+        document.getElementById('startButton').addEventListener('click', function() {
+            document.getElementById('message').style.display = 'none';
+            startGame();
+        });
+        
+        function startGame() {
+            isGameActive = true;
+            
+            // Lock pointer
+            document.body.requestPointerLock = document.body.requestPointerLock || document.body.mozRequestPointerLock;
+            document.body.requestPointerLock();
+            
+            // Scene setup
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue
+            
+            // Camera setup
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, 0);
+            
+            // Player settings
+            const playerHeight = 2;
+            const crouchHeight = 1;
+            let playerVelocity = new THREE.Vector3();
+            const playerSpeed = 0.1;
+            const crouchSpeed = 0.05;
+            
+            // Renderer setup
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 10, 7);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            scene.add(directionalLight);
+            
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry(100, 100);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x1B5E20, // Dark green
+                side: THREE.DoubleSide,
+                roughness: 1
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Buildings
+            const buildings = [];
+            const buildingCount = 15;
+            const buildingMaterial = new THREE.MeshStandardMaterial({ color: 0x607D8B }); // Bluish gray
+            
+            for (let i = 0; i < buildingCount; i++) {
+                const width = 3 + Math.random() * 5;
+                const height = 3 + Math.random() * 8;
+                const depth = 3 + Math.random() * 5;
+                
+                const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
+                const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+                
+                // Position buildings randomly, but keep some distance from the center (player spawn)
+                let x, z;
+                do {
+                    x = (Math.random() - 0.5) * 80;
+                    z = (Math.random() - 0.5) * 80;
+                } while (Math.sqrt(x*x + z*z) < 10); // Keep minimum distance from center
+                
+                building.position.set(x, height/2, z);
+                building.castShadow = true;
+                building.receiveShadow = true;
+                
+                // Add to scene and tracking array
+                scene.add(building);
+                buildings.push({
+                    mesh: building,
+                    box: new THREE.Box3().setFromObject(building)
+                });
+            }
+            
+            // Enemies
+            const enemies = [];
+            const enemyCount = 10;
+            const enemyGeometry = new THREE.BoxGeometry(1, 2, 1);
+            const enemyMaterial = new THREE.MeshStandardMaterial({ color: 0xFF0000 }); // Red
+            
+            for (let i = 0; i < enemyCount; i++) {
+                const enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
+                
+                // Position enemies randomly, but keep some distance from the center (player spawn)
+                let x, z;
+                do {
+                    x = (Math.random() - 0.5) * 80;
+                    z = (Math.random() - 0.5) * 80;
+                } while (Math.sqrt(x*x + z*z) < 15); // Keep minimum distance from center
+                
+                enemy.position.set(x, 1, z);
+                enemy.castShadow = true;
+                enemy.receiveShadow = true;
+                
+                scene.add(enemy);
+                enemies.push({
+                    mesh: enemy,
+                    health: 100,
+                    speed: 0.02 + Math.random() * 0.03,
+                    state: 'patrol', // patrol, chase, attack
+                    patrolTarget: new THREE.Vector3(
+                        enemy.position.x + (Math.random() - 0.5) * 20,
+                        1,
+                        enemy.position.z + (Math.random() - 0.5) * 20
+                    ),
+                    shootTimer: 0
+                });
+            }
+            
+            // Player collision box
+            const playerBox = new THREE.Box3(
+                new THREE.Vector3(-0.5, 0, -0.5),
+                new THREE.Vector3(0.5, playerHeight, 0.5)
+            );
+            
+            // Controls
+            const keys = {};
+            let mouseX = 0;
+            let mouseY = 0;
+            
+            window.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+            window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isGameActive) return;
+                
+                mouseX += e.movementX || 0;
+                mouseY += e.movementY || 0;
+                
+                // Rotate camera based on mouse movement
+                camera.rotation.y = -mouseX * 0.002;
+                camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, -mouseY * 0.002));
+            });
+            
+            // Shooting logic
+            document.addEventListener('click', () => {
+                if (!isGameActive) return;
+                
+                // Create bullet ray from camera
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                
+                // Check enemy hits
+                for (let i = 0; i < enemies.length; i++) {
+                    const enemyBox = new THREE.Box3().setFromObject(enemies[i].mesh);
+                    const intersects = raycaster.intersectObject(enemies[i].mesh);
+                    
+                    if (intersects.length > 0) {
+                        enemies[i].health -= 50;
+                        
+                        // Enemy death
+                        if (enemies[i].health <= 0) {
+                            scene.remove(enemies[i].mesh);
+                            enemies.splice(i, 1);
+                            score += 10;
+                            document.getElementById('score').textContent = `Score: ${score}`;
+                            i--;
+                        }
+                    }
+                }
+                
+                // Create muzzle flash effect
+                const muzzleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+                const muzzleMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFF00 });
+                const muzzleFlash = new THREE.Mesh(muzzleGeometry, muzzleMaterial);
+                
+                // Position in front of camera
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+                muzzleFlash.position.copy(camera.position).add(direction.multiplyScalar(1));
+                
+                scene.add(muzzleFlash);
+                
+                // Remove flash after short time
+                setTimeout(() => {
+                    scene.remove(muzzleFlash);
+                }, 50);
+            });
+            
+            // Crouching
+            document.addEventListener('keydown', (e) => {
+                if (e.key.toLowerCase() === 'c') {
+                    isCrouching = !isCrouching;
+                    document.getElementById('status').textContent = isCrouching ? 'CROUCHING' : 'STANDING';
+                    
+                    if (isCrouching) {
+                        camera.position.y = crouchHeight;
+                        playerBox.max.y = crouchHeight;
+                    } else {
+                        camera.position.y = playerHeight;
+                        playerBox.max.y = playerHeight;
+                    }
+                }
+            });
+            
+            // Check collision between player and buildings
+            function checkBuildingCollisions(newPosition) {
+                const playerBoxAtNewPosition = new THREE.Box3(
+                    new THREE.Vector3(
+                        newPosition.x - 0.5,
+                        newPosition.y - playerHeight/2,
+                        newPosition.z - 0.5
+                    ),
+                    new THREE.Vector3(
+                        newPosition.x + 0.5,
+                        newPosition.y + playerHeight/2,
+                        newPosition.z + 0.5
+                    )
+                );
+                
+                for (const building of buildings) {
+                    if (playerBoxAtNewPosition.intersectsBox(building.box)) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            
+            // Game loop
+            function update() {
+                if (!isGameActive) return;
+                
+                requestAnimationFrame(update);
+                
+                // Update player movement
+                playerVelocity.set(0, 0, 0);
+                
+                const currentSpeed = isCrouching ? crouchSpeed : playerSpeed;
+                
+                // Calculate movement direction based on camera rotation
+                const moveDirection = new THREE.Vector3();
+                
+                if (keys['w']) {
+                    moveDirection.z = -1;
+                }
+                if (keys['s']) {
+                    moveDirection.z = 1;
+                }
+                if (keys['a']) {
+                    moveDirection.x = -1;
+                }
+                if (keys['d']) {
+                    moveDirection.x = 1;
+                }
+                
+                // Normalize movement direction if moving diagonally
+                if (moveDirection.length() > 0) {
+                    moveDirection.normalize();
+                }
+                
+                // Apply camera rotation to movement
+                moveDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), camera.rotation.y);
+                
+                // Apply speed to movement vector
+                playerVelocity.add(moveDirection.multiplyScalar(currentSpeed));
+                
+                // Check for collisions and update player position
+                const newPosition = camera.position.clone().add(playerVelocity);
+                if (!checkBuildingCollisions(newPosition)) {
+                    camera.position.copy(newPosition);
+                }
+                
+                // Update enemy behavior
+                enemies.forEach((enemy, index) => {
+                    const distanceToPlayer = enemy.mesh.position.distanceTo(camera.position);
+                    
+                    // State machine for enemy behavior
+                    if (distanceToPlayer < 15) {
+                        enemy.state = 'chase';
+                    } else if (distanceToPlayer > 25) {
+                        enemy.state = 'patrol';
+                    }
+                    
+                    // Attack if very close
+                    if (distanceToPlayer < 5) {
+                        enemy.state = 'attack';
+                    }
+                    
+                    // Handle state behaviors
+                    switch (enemy.state) {
+                        case 'patrol':
+                            // Move towards patrol target
+                            const patrolDir = enemy.patrolTarget.clone().sub(enemy.mesh.position).normalize();
+                            enemy.mesh.position.add(patrolDir.multiplyScalar(enemy.speed * 0.5));
+                            
+                            // If reached target, set new one
+                            if (enemy.mesh.position.distanceTo(enemy.patrolTarget) < 1) {
+                                enemy.patrolTarget = new THREE.Vector3(
+                                    enemy.mesh.position.x + (Math.random() - 0.5) * 20,
+                                    1,
+                                    enemy.mesh.position.z + (Math.random() - 0.5) * 20
+                                );
+                            }
+                            break;
+                            
+                        case 'chase':
+                            // Move towards player
+                            const chaseDir = camera.position.clone().sub(enemy.mesh.position).normalize();
+                            enemy.mesh.position.add(chaseDir.multiplyScalar(enemy.speed));
+                            
+                            // Look at player
+                            enemy.mesh.lookAt(camera.position);
+                            break;
+                            
+                        case 'attack':
+                            // Face player
+                            enemy.mesh.lookAt(camera.position);
+                            
+                            // Shoot at player periodically
+                            enemy.shootTimer++;
+                            if (enemy.shootTimer > 60) { // About every 1 second at 60fps
+                                // Calculate hit probability based on distance and randomness
+                                const hitChance = Math.max(0, 1 - distanceToPlayer/10) * 0.7;
+                                
+                                if (Math.random() < hitChance) {
+                                    health -= 10;
+                                    document.getElementById('health').textContent = `Health: ${health}`;
+                                    
+                                    if (health <= 0) {
+                                        gameOver();
+                                    }
+                                }
+                                
+                                enemy.shootTimer = 0;
+                            }
+                            break;
+                    }
+                    
+                    // Avoid building collisions (simplified)
+                    for (const building of buildings) {
+                        const enemyBox = new THREE.Box3().setFromObject(enemy.mesh);
+                        if (enemyBox.intersectsBox(building.box)) {
+                            // Simple bounce back
+                            const toBuilding = building.mesh.position.clone().sub(enemy.mesh.position).normalize();
+                            enemy.mesh.position.sub(toBuilding.multiplyScalar(0.2));
+                            
+                            // Choose new patrol target if in patrol state
+                            if (enemy.state === 'patrol') {
+                                enemy.patrolTarget = new THREE.Vector3(
+                                    enemy.mesh.position.x + (Math.random() - 0.5) * 20,
+                                    1,
+                                    enemy.mesh.position.z + (Math.random() - 0.5) * 20
+                                );
+                            }
+                        }
+                    }
+                });
+                
+                renderer.render(scene, camera);
+            }
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            function gameOver() {
+                isGameActive = false;
+                
+                document.getElementById('message').style.display = 'block';
+                document.getElementById('message').innerHTML = `
+                    <h2>Game Over</h2>
+                    <p>Your score: ${score}</p>
+                    <button id="restartButton">PLAY AGAIN</button>
+                `;
+                
+                document.getElementById('restartButton').addEventListener('click', () => {
+                    location.reload();
+                });
+                
+                document.exitPointerLock();
+            }
+            
+            // Start game loop
+            update();
+        }
+    </script>
+</body>
+</html>
