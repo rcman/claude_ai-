@@ -1504,3 +1504,512 @@
 
             return entity;
         }
+		// Function to find nearby entity by type within radius
+        function findNearbyEntity(type, position, radius) {
+            for (let entity of state.world.entities) {
+                if (entity.userData && entity.userData.type === type) {
+                    const distance = entity.position.distanceTo(position);
+                    if (distance <= radius) {
+                        return entity;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Function to craft items
+        function craftItem(recipeName) {
+            const recipes = {
+                'pickaxe': [
+                    { id: 'wood', count: 5 },
+                    { id: 'stone', count: 3 }
+                ],
+                'storage_box': [
+                    { id: 'wood', count: 10 }
+                ],
+                'knife': [
+                    { id: 'wood', count: 2 },
+                    { id: 'metal_ore', count: 1 }
+                ]
+                // More recipes can be added here
+            };
+            
+            const recipe = recipes[recipeName];
+            if (!recipe) {
+                showMessage(`Unknown recipe: ${recipeName}`);
+                return false;
+            }
+            
+            // Check if player has all ingredients
+            for (let ingredient of recipe) {
+                let available = 0;
+                // Count total of this ingredient across all inventory stacks
+                for (let item of state.inventory.items) {
+                    if (item.id === ingredient.id) {
+                        available += item.count;
+                    }
+                }
+                
+                if (available < ingredient.count) {
+                    showMessage(`Not enough ${itemDatabase[ingredient.id].name} to craft ${itemDatabase[recipeName].name}`);
+                    return false;
+                }
+            }
+            
+            // Remove ingredients from inventory
+            for (let ingredient of recipe) {
+                let remaining = ingredient.count;
+                // We need to modify the array while iterating, so use indices
+                for (let i = state.inventory.items.length - 1; i >= 0 && remaining > 0; i--) {
+                    let item = state.inventory.items[i];
+                    if (item.id === ingredient.id) {
+                        const toRemove = Math.min(item.count, remaining);
+                        item.count -= toRemove;
+                        remaining -= toRemove;
+                        
+                        // Remove item stack if it's empty
+                        if (item.count <= 0) {
+                            state.inventory.items.splice(i, 1);
+                        }
+                    }
+                }
+            }
+            
+            // Add crafted item to inventory
+            if (addItemToInventory(recipeName)) {
+                showMessage(`Crafted ${itemDatabase[recipeName].name}`);
+                updateInventoryUI();
+                updateQuickSlots();
+                return true;
+            } else {
+                showMessage(`Inventory full, cannot add ${itemDatabase[recipeName].name}`);
+                return false;
+            }
+        }
+        
+        // Implement drink water function
+        function drinkWater() {
+            // Check if player is near water (could be determined by position or ray-casting down)
+            // For simplicity, we're just checking if player is at ground level near coordinate z=0
+            const nearWater = Math.abs(player.position.z) < 15 && player.position.y < 1.5;
+            
+            if (nearWater) {
+                state.player.thirst = Math.min(100, state.player.thirst + 30);
+                updateStatusBars();
+                showMessage("You drink water, +30 thirst");
+            } else {
+                showMessage("You need to be near water to drink");
+            }
+        }
+        
+        // Function to respawn all resources if needed (e.g., after reload)
+        function respawnAllResources() {
+            // Clear existing entities first (except player)
+            for (let i = state.world.entities.length - 1; i >= 0; i--) {
+                const entity = state.world.entities[i];
+                scene.remove(entity);
+            }
+            state.world.entities = [];
+            
+            // Regenerate world
+            generateWorld();
+        }
+        
+        // Time and weather system
+        function updateWeatherSystem(deltaSeconds) {
+            // Implement weather changes based on time
+            // This could change fog density, add particle effects for rain/snow, etc.
+            
+            // Example: Increase fog when it's evening or early morning
+            const isDusk = state.world.time > 0.4 && state.world.time < 0.45;
+            const isDawn = state.world.time > 0.9 && state.world.time < 0.95;
+            
+            if (isDusk || isDawn) {
+                scene.fog.near = 30;
+                scene.fog.far = 50;
+            } else {
+                scene.fog.near = 50;
+                scene.fog.far = 100;
+            }
+            
+            // Could implement precipitation here with particle systems
+        }
+        
+        // Save game state to localStorage
+        function saveGame() {
+            try {
+                // Copy state but remove non-serializable objects like THREE.Vector3
+                const saveState = {
+                    player: {
+                        health: state.player.health,
+                        hunger: state.player.hunger,
+                        thirst: state.player.thirst,
+                        // Convert Vector3 to simple object
+                        position: {
+                            x: state.player.position.x,
+                            y: state.player.position.y,
+                            z: state.player.position.z
+                        },
+                        isDead: state.player.isDead
+                    },
+                    inventory: {
+                        items: JSON.parse(JSON.stringify(state.inventory.items)), // Deep copy
+                        maxSlots: state.inventory.maxSlots,
+                        selectedSlot: state.inventory.selectedSlot
+                    },
+                    world: {
+                        time: state.world.time,
+                        // Entities will be regenerated on load
+                    },
+                    ui: {
+                        inventoryOpen: false // Always close inventory on save
+                    }
+                };
+                
+                localStorage.setItem('survivalGameSave', JSON.stringify(saveState));
+                showMessage("Game saved successfully");
+                return true;
+            } catch (error) {
+                console.error("Error saving game:", error);
+                showMessage("Failed to save game");
+                return false;
+            }
+        }
+        
+        // Load game state from localStorage
+        function loadGame() {
+            try {
+                const saveData = localStorage.getItem('survivalGameSave');
+                if (!saveData) {
+                    showMessage("No saved game found");
+                    return false;
+                }
+                
+                const saveState = JSON.parse(saveData);
+                
+                // Update player state
+                state.player.health = saveState.player.health;
+                state.player.hunger = saveState.player.hunger;
+                state.player.thirst = saveState.player.thirst;
+                state.player.isDead = saveState.player.isDead;
+                
+                // Update position (both state and actual mesh)
+                state.player.position.set(
+                    saveState.player.position.x,
+                    saveState.player.position.y,
+                    saveState.player.position.z
+                );
+                player.position.copy(state.player.position);
+                
+                // Update inventory
+                state.inventory.items = saveState.inventory.items;
+                state.inventory.selectedSlot = saveState.inventory.selectedSlot;
+                
+                // Update world time
+                state.world.time = saveState.world.time;
+                
+                // Respawn all resources
+                respawnAllResources();
+                
+                // Update UI
+                updateStatusBars();
+                updateInventoryUI();
+                updateQuickSlots();
+                
+                showMessage("Game loaded successfully");
+                return true;
+            } catch (error) {
+                console.error("Error loading game:", error);
+                showMessage("Failed to load game");
+                return false;
+            }
+        }
+        
+        // Handle mouse look controls for first-person mode
+        function setupFirstPersonControls() {
+            let isLocked = false;
+            
+            document.addEventListener('click', () => {
+                if (!isLocked) {
+                    renderer.domElement.requestPointerLock();
+                }
+            });
+            
+            document.addEventListener('pointerlockchange', () => {
+                isLocked = document.pointerLockElement === renderer.domElement;
+                controls.enabled = !isLocked; // Disable orbit controls when in first person
+            });
+            
+            document.addEventListener('mousemove', (event) => {
+                if (isLocked && !state.ui.inventoryOpen) {
+                    // Update player rotation based on mouse movement
+                    player.rotation.y -= event.movementX * 0.002;
+                    
+                    // Optional: implement head bobbing while moving
+                    if (keysPressed['w'] || keysPressed['s'] || keysPressed['a'] || keysPressed['d']) {
+                        const now = Date.now();
+                        const bobAmount = Math.sin(now * 0.01) * 0.05;
+                        player.position.y = 1 + bobAmount;
+                    }
+                }
+            });
+        }
+        
+        // Display debug information
+        function showDebugInfo() {
+            const debugElement = document.createElement('div');
+            debugElement.style.position = 'absolute';
+            debugElement.style.top = '10px';
+            debugElement.style.left = '10px';
+            debugElement.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+            debugElement.style.color = 'white';
+            debugElement.style.padding = '5px';
+            debugElement.style.fontFamily = 'monospace';
+            debugElement.style.fontSize = '12px';
+            debugElement.style.zIndex = '1000';
+            debugElement.id = 'debug-info';
+            document.body.appendChild(debugElement);
+            
+            // Update debug info each frame
+            setInterval(() => {
+                if (debugElement && player) {
+                    debugElement.innerHTML = `
+                        FPS: ${Math.round(1 / clock.getDelta())}
+                        Position: x=${player.position.x.toFixed(2)}, y=${player.position.y.toFixed(2)}, z=${player.position.z.toFixed(2)}
+                        Time: ${(state.world.time * 24).toFixed(1)} hours
+                        Entities: ${state.world.entities.length}
+                    `;
+                }
+            }, 500); // Update twice per second
+        }
+        
+        // Add keybindings for game functions
+        function setupKeybindings() {
+            document.addEventListener('keydown', (event) => {
+                // Already have basic movement in keydown handler
+                
+                // Add more keybindings
+                switch (event.key.toLowerCase()) {
+                    case 'f':
+                        // Drink water
+                        if (!state.ui.inventoryOpen && !state.player.isDead) {
+                            drinkWater();
+                        }
+                        break;
+                    case 'r':
+                        // Use/consume selected item
+                        if (!state.ui.inventoryOpen && !state.player.isDead) {
+                            const selectedItem = state.inventory.items[state.inventory.selectedSlot];
+                            if (selectedItem && itemDatabase[selectedItem.id].useFunction) {
+                                const useFunction = itemDatabase[selectedItem.id].useFunction;
+                                if (typeof window[useFunction] === 'function') {
+                                    window[useFunction]();
+                                }
+                            }
+                        }
+                        break;
+                    case 'c':
+                        // Open crafting menu (not implemented)
+                        showMessage("Crafting menu not implemented yet");
+                        break;
+                    case 'f5':
+                        // Save game
+                        saveGame();
+                        event.preventDefault();
+                        break;
+                    case 'f9':
+                        // Load game
+                        loadGame();
+                        event.preventDefault();
+                        break;
+                }
+            });
+        }
+        
+        // Add support for gamepad controls
+        function setupGamepadControls() {
+            let gamepad = null;
+            
+            window.addEventListener("gamepadconnected", (e) => {
+                gamepad = e.gamepad;
+                showMessage(`Gamepad connected: ${gamepad.id}`);
+            });
+            
+            window.addEventListener("gamepaddisconnected", (e) => {
+                gamepad = null;
+                showMessage("Gamepad disconnected");
+            });
+            
+            // Process gamepad input in animation loop
+            function processGamepadInput() {
+                if (!gamepad) {
+                    gamepad = navigator.getGamepads ? navigator.getGamepads()[0] : null;
+                    return;
+                }
+                
+                // Refresh gamepad state
+                gamepad = navigator.getGamepads()[gamepad.index];
+                
+                if (gamepad && !state.ui.inventoryOpen && !state.player.isDead) {
+                    // Left stick movement
+                    const deadzone = 0.15;
+                    const leftX = Math.abs(gamepad.axes[0]) > deadzone ? gamepad.axes[0] : 0;
+                    const leftY = Math.abs(gamepad.axes[1]) > deadzone ? gamepad.axes[1] : 0;
+                    
+                    if (leftX !== 0) keysPressed['d'] = leftX > 0;
+                    if (leftX !== 0) keysPressed['a'] = leftX < 0;
+                    if (leftY !== 0) keysPressed['s'] = leftY > 0;
+                    if (leftY !== 0) keysPressed['w'] = leftY < 0;
+                    
+                    // Button presses (varies by controller, example for standard gamepad)
+                    // A button (usually 0) for interaction
+                    if (gamepad.buttons[0].pressed) {
+                        const interactable = getInteractableObject();
+                        if (interactable) {
+                            interactWithObject(interactable);
+                        }
+                    }
+                    
+                    // Y button (usually 3) for inventory
+                    if (gamepad.buttons[3].pressed && !gamepad.buttons[3].wasPressed) {
+                        toggleInventory();
+                    }
+                    gamepad.buttons[3].wasPressed = gamepad.buttons[3].pressed;
+                    
+                    // Bumpers for item selection
+                    if (gamepad.buttons[4].pressed && !gamepad.buttons[4].wasPressed) {
+                        // Left bumper - previous item
+                        state.inventory.selectedSlot = (state.inventory.selectedSlot - 1 + 6) % 6;
+                        updateQuickSlots();
+                    }
+                    gamepad.buttons[4].wasPressed = gamepad.buttons[4].pressed;
+                    
+                    if (gamepad.buttons[5].pressed && !gamepad.buttons[5].wasPressed) {
+                        // Right bumper - next item
+                        state.inventory.selectedSlot = (state.inventory.selectedSlot + 1) % 6;
+                        updateQuickSlots();
+                    }
+                    gamepad.buttons[5].wasPressed = gamepad.buttons[5].pressed;
+                }
+            }
+            
+            // Add to animation loop
+            return processGamepadInput;
+        }
+        
+        // Create additional UI elements
+        function createAdditionalUI() {
+            // Create a simple pause menu
+            const pauseMenu = document.createElement('div');
+            pauseMenu.id = 'pause-menu';
+            pauseMenu.style.position = 'absolute';
+            pauseMenu.style.top = '50%';
+            pauseMenu.style.left = '50%';
+            pauseMenu.style.transform = 'translate(-50%, -50%)';
+            pauseMenu.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+            pauseMenu.style.padding = '20px';
+            pauseMenu.style.borderRadius = '10px';
+            pauseMenu.style.color = 'white';
+            pauseMenu.style.display = 'none';
+            pauseMenu.style.flexDirection = 'column';
+            pauseMenu.style.alignItems = 'center';
+            pauseMenu.style.gap = '10px';
+            pauseMenu.style.zIndex = '1000';
+            
+            const createButton = (text, onClick) => {
+                const button = document.createElement('button');
+                button.textContent = text;
+                button.style.padding = '10px 20px';
+                button.style.margin = '5px';
+                button.style.backgroundColor = '#2c3e50';
+                button.style.color = 'white';
+                button.style.border = 'none';
+                button.style.borderRadius = '5px';
+                button.style.cursor = 'pointer';
+                button.addEventListener('click', onClick);
+                return button;
+            };
+            
+            pauseMenu.appendChild(document.createElement('h2')).textContent = 'Game Paused';
+            
+            pauseMenu.appendChild(createButton('Resume', () => {
+                pauseMenu.style.display = 'none';
+                clock.start();
+            }));
+            
+            pauseMenu.appendChild(createButton('Save Game', () => {
+                saveGame();
+            }));
+            
+            pauseMenu.appendChild(createButton('Load Game', () => {
+                loadGame();
+            }));
+            
+            pauseMenu.appendChild(createButton('Exit to Menu', () => {
+                // This would normally return to a main menu
+                location.reload();
+            }));
+            
+            document.body.appendChild(pauseMenu);
+            
+            // Add escape key listener for pause menu
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    if (pauseMenu.style.display === 'none') {
+                        pauseMenu.style.display = 'flex';
+                        clock.stop();
+                    } else {
+                        pauseMenu.style.display = 'none';
+                        clock.start();
+                    }
+                }
+            });
+        }
+        
+        // Initialize everything that should run at startup
+        function initializeGameSystems() {
+            // Set up inventory and initial items
+            setupInventory();
+            initializePlayerItems();
+            
+            // Generate world and entities
+            generateWorld();
+            
+            // Update UI elements
+            updateInventoryUI();
+            updateQuickSlots();
+            updateStatusBars();
+            
+            // Setup controls and keybindings
+            setupKeybindings();
+            const processGamepadInput = setupGamepadControls();
+            
+            // Create additional UI
+            createAdditionalUI();
+            
+            // Uncomment to enable debug info
+            // showDebugInfo();
+            
+            // Check for saved game
+            if (localStorage.getItem('survivalGameSave')) {
+                showMessage("Press F9 to load saved game");
+            }
+            
+            // Add gamepad processing to animation loop if needed
+            if (processGamepadInput) {
+                const originalAnimate = animate;
+                animate = function() {
+                    processGamepadInput();
+                    originalAnimate();
+                };
+            }
+            
+            // Welcome message
+            showMessage("Welcome to Survival Game! [WASD] Move, [Tab] Inventory, [E] Interact, [1-6] Quick Slots");
+        }
+        
+        // Call this at the end of initGame if not already called
+        // initializeGameSystems();
+    </script>
+</body>
+</html>
