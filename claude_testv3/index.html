@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Survival Open World</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="info">Survival Open World<br>WASD to move, Mouse to look, E to interact, Tab for inventory</div>
+    <div id="crosshair">+</div>
+    
+    <div id="status-bars">
+        <div class="status-bar">
+            <span class="status-bar-label">Health:</span>
+            <div class="status-bar-outer">
+                <div id="health-bar" class="status-bar-inner" style="width: 100%; background: #ff5555;"></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <span class="status-bar-label">Food:</span>
+            <div class="status-bar-outer">
+                <div id="food-bar" class="status-bar-inner" style="width: 100%; background: #ff9955;"></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <span class="status-bar-label">Water:</span>
+            <div class="status-bar-outer">
+                <div id="water-bar" class="status-bar-inner" style="width: 100%; background: #55aaff;"></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <span class="status-bar-label">Stamina:</span>
+            <div class="status-bar-outer">
+                <div id="stamina-bar" class="status-bar-inner" style="width: 100%; background: #55ff55;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="quickbar">
+        <div class="quickbar-slot active" data-slot="0">Axe</div>
+        <div class="quickbar-slot" data-slot="1">Pick</div>
+        <div class="quickbar-slot" data-slot="2">Knife</div>
+        <div class="quickbar-slot" data-slot="3">Camp</div>
+        <div class="quickbar-slot" data-slot="4"></div>
+        <div class="quickbar-slot" data-slot="5"></div>
+        <div class="quickbar-slot" data-slot="6"></div>
+        <div class="quickbar-slot" data-slot="7"></div>
+    </div>
+    
+    <div id="inventory">
+        <h2>Inventory</h2>
+        <div class="inventory-grid">
+            <!-- Inventory slots will be generated here -->
+        </div>
+    </div>
+    
+    <div id="day-night-indicator">Day 1 - 12:00</div>
+    
+    <div id="interaction-prompt">Press E to interact</div>
+    
+    <!-- Three.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Game scripts -->
+    <script src="js/player.js"></script>
+    <script src="js/world.js"></script>
+    <script src="js/resources.js"></script>
+    <script src="js/inventory.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/animals.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
