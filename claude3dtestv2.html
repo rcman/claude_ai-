@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Survival Open World</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            margin-top: -10px;
+            margin-left: -10px;
+            color: white;
+            font-size: 20px;
+            text-align: center;
+            pointer-events: none;
+        }
+        #status-bars {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 200px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+        }
+        .status-bar {
+            margin-bottom: 8px;
+        }
+        .status-bar-label {
+            display: inline-block;
+            width: 70px;
+        }
+        .status-bar-outer {
+            display: inline-block;
+            width: 120px;
+            height: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+        }
+        .status-bar-inner {
+            height: 100%;
+            border-radius: 3px;
+        }
+        #quickbar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 500px;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-evenly;
+            align-items: center;
+        }
+        .quickbar-slot {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 10px;
+            position: relative;
+        }
+        .quickbar-slot.active {
+            border-color: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .slot-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 10px;
+        }
+        #inventory {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            height: 400px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 5px;
+            padding: 20px;
+            color: white;
+        }
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-gap: 10px;
+            margin-top: 20px;
+        }
+        .inventory-slot {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 10px;
+            position: relative;
+        }
+        #day-night-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+        }
+        #interaction-prompt {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Survival Open World<br>WASD to move, Mouse to look, E to interact, Tab for inventory</div>
+    <div id="crosshair">+</div>
+    
+    <div id="status-bars">
+        <div class="status-bar">
+            <span class="status-bar-label">Health:</span>
+            <div class="status-bar-outer">
+                <div id="health-bar" class="status-bar-inner" style="width: 100%; background: #ff5555;"></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <span class="status-bar-label">Food:</span>
+            <div class="status-bar-outer">
+                <div id="food-bar" class="status-bar-inner" style="width: 100%; background: #ff9955;"></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <span class="status-bar-label">Water:</span>
+            <div class="status-bar-outer">
+                <div id="water-bar" class="status-bar-inner" style="width: 100%; background: #55aaff;"></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <span class="status-bar-label">Stamina:</span>
+            <div class="status-bar-outer">
+                <div id="stamina-bar" class="status-bar-inner" style="width: 100%; background: #55ff55;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="quickbar">
+        <div class="quickbar-slot active" data-slot="0">Axe</div>
+        <div class="quickbar-slot" data-slot="1">Pick</div>
+        <div class="quickbar-slot" data-slot="2">Knife</div>
+        <div class="quickbar-slot" data-slot="3">Camp</div>
+        <div class="quickbar-slot" data-slot="4"></div>
+        <div class="quickbar-slot" data-slot="5"></div>
+        <div class="quickbar-slot" data-slot="6"></div>
+        <div class="quickbar-slot" data-slot="7"></div>
+    </div>
+    
+    <div id="inventory">
+        <h2>Inventory</h2>
+        <div class="inventory-grid">
+            <!-- Inventory slots will be generated here -->
+        </div>
+    </div>
+    
+    <div id="day-night-indicator">Day 1 - 12:00</div>
+    
+    <div id="interaction-prompt">Press E to interact</div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Main variables
+        let camera, scene, renderer;
+        let terrain;
+        let player = {
+            height: 1.8,
+            speed: 0.1,
+            turnSpeed: 0.002,
+            canJump: true,
+            velocity: new THREE.Vector3(),
+            direction: new THREE.Vector3(),
+            health: 100,
+            food: 100,
+            water: 100,
+            stamina: 100,
+            inventory: [],
+            quickbar: [
+                { id: 'axe', name: 'Axe', count: 1 },
+                { id: 'pickaxe', name: 'Pick', count: 1 },
+                { id: 'knife', name: 'Knife', count: 1 },
+                { id: 'campfire', name: 'Camp', count: 1 },
+                null, null, null, null
+            ],
+            activeSlot: 0
+        };
+        
+        // World state
+        const world = {
+            dayTime: 0.5, // 0-1 representing a full day cycle
+            daySpeed: 0.001, // Speed of day progression
+            dayCount: 1,
+            resources: [],
+            animals: [],
+            barrels: []
+        };
+        
+        // Resource definitions
+        const resourceTypes = {
+            tree: { 
+                yields: [{ id: 'wood', name: 'Wood', min: 3, max: 6 }],
+                tool: 'axe'
+            },
+            rock: { 
+                yields: [{ id: 'stone', name: 'Stone', min: 2, max: 4 }],
+                tool: 'pickaxe'
+            },
+            grass: { 
+                yields: [{ id: 'grass', name: 'Grass', min: 1, max: 3 }],
+                tool: 'knife'
+            },
+            scrapMetal: { 
+                yields: [{ id: 'scrap', name: 'Scrap', min: 1, max: 2 }],
+                tool: 'pickaxe'
+            },
+            animal: { 
+                yields: [{ id: 'meat', name: 'Meat', min: 1, max: 3 }],
+                tool: 'knife'
+            }
+        };
+        
+        // Barrel loot table
+        const barrelLoot = [
+            { id: 'wood', name: 'Wood', weight: 20, min: 1, max: 5 },
+            { id: 'stone', name: 'Stone', weight: 20, min: 1, max: 3 },
+            { id: 'grass', name: 'Grass', weight: 15, min: 1, max: 4 },
+            { id: 'scrap', name: 'Scrap', weight: 10, min: 1, max: 2 },
+            { id: 'nails', name: 'Nails', weight: 8, min: 2, max: 6 },
+            { id: 'rope', name: 'Rope', weight: 5, min: 1, max: 2 }
+        ];
+        
+        // Controls state
+        const controls = {
+            moveForward: false,
+            moveBackward: false,
+            moveLeft: false,
+            moveRight: false,
+            jump: false,
+            sprint: false
+        };
+
+        // Raycaster for interaction and collision detection
+        const raycaster = new THREE.Raycaster();
+        
+        // Mouse control variables
+        let pitchObject, yawObject;
+        let prevTime = performance.now();
+        
+        // UI elements
+        const healthBar = document.getElementById('health-bar');
+        const foodBar = document.getElementById('food-bar');
+        const waterBar = document.getElementById('water-bar');
+        const staminaBar = document.getElementById('stamina-bar');
+        const inventoryPanel = document.getElementById('inventory');
+        const dayNightIndicator = document.getElementById('day-night-indicator');
+        const interactionPrompt = document.getElementById('interaction-prompt');
+        
+        // Game state
+        let isInventoryOpen = false;
+        let interactableObject = null;
+        
+        // Initialize the world
+        init();
+        animate();
+
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue
+            scene.fog = new THREE.Fog(0x87CEEB, 10, 750);
+
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            // Set up camera controls (pitch and yaw)
+            pitchObject = new THREE.Object3D();
+            pitchObject.add(camera);
+            
+            yawObject = new THREE.Object3D();
+            yawObject.position.y = player.height;
+            yawObject.add(pitchObject);
+            
+            scene.add(yawObject);
+
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0x666666);
+            scene.add(ambientLight);
+            
+            // Directional light (sun/moon)
+            const sunLight = new THREE.DirectionalLight(0xFFFFFF, 0.8);
+            sunLight.position.set(50, 100, 50);
+            sunLight.castShadow = true;
+            scene.add(sunLight);
+            world.sunLight = sunLight;
+
+            // Create terrain
+            createTerrain();
+            
+            // Create world objects
+            createWorld();
+            
+            // Init inventory UI
+            initInventoryUI();
+
+            // Set up renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Set up event listeners
+            document.addEventListener('mousedown', onMouseDown, false);
+            document.addEventListener('mousemove', onMouseMove, false);
+            document.addEventListener('keydown', onKeyDown, false);
+            document.addEventListener('keyup', onKeyUp, false);
+            document.addEventListener('wheel', onMouseWheel, false);
+            
+            // Lock pointer on click
+            renderer.domElement.addEventListener('click', function() {
+                if (!isInventoryOpen) {
+                    renderer.domElement.requestPointerLock();
+                }
+            });
+            
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            // Initialize inventory
+            for (let i = 0; i < 24; i++) {
+                player.inventory.push(null);
+            }
+        }
+
+        function createTerrain() {
+            // Create a simple flat terrain for now
+            const terrainGeometry = new THREE.PlaneGeometry(1000, 1000, 100, 100);
+            terrainGeometry.rotateX(-Math.PI / 2);
+            
+            // Add some basic height variations (you could use more complex noise here)
+            const vertices = terrainGeometry.attributes.position.array;
+            for (let i = 0; i < vertices.length; i += 3) {
+                // Skip x and z coordinates (i and i+2)
+                vertices[i + 1] = Math.sin(vertices[i] / 20) * Math.cos(vertices[i + 2] / 20) * 5;
+            }
+            
+            // Update normals
+            terrainGeometry.computeVertexNormals();
+            
+            // Create terrain material (green for grass)
+            const terrainMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x4CAF50,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
+            terrain.receiveShadow = true;
+            scene.add(terrain);
+        }
+
+        function createWorld() {
+            // Add trees (harvestable)
+            for (let i = 0; i < 500; i++) {
+                createTree(
+                    Math.random() * 800 - 400,
+                    0,
+                    Math.random() * 800 - 400
+                );
+            }
+            
+            // Add rocks (harvestable)
+            for (let i = 0; i < 300; i++) {
+                createRock(
+                    Math.random() * 800 - 400,
+                    0,
+                    Math.random() * 800 - 400
+                );
+            }
+            
+            // Add grass patches (harvestable)
+            for (let i = 0; i < 400; i++) {
+                createGrass(
+                    Math.random() * 800 - 400,
+                    0,
+                    Math.random() * 800 - 400
+                );
+            }
+            
+            // Add scrap metal (harvestable)
+            for (let i = 0; i < 200; i++) {
+                createScrapMetal(
+                    Math.random() * 800 - 400,
+                    0,
+                    Math.random() * 800 - 400
+                );
+            }
+            
+            // Add animals (moving and harvestable)
+            for (let i = 0; i < 15; i++) {
+                createAnimal(
+                    Math.random() * 800 - 400,
+                    0,
+                    Math.random() * 800 - 400
+                );
+            }
+            
+            // Add barrels with random loot
+            for (let i = 0; i < 250; i++) {
+                createBarrel(
+                    Math.random() * 800 - 400,
+                    0,
+                    Math.random() * 800 - 400
+                );
+            }
+            
+            // Add water (a simple blue plane)
+            const waterGeometry = new THREE.PlaneGeometry(200, 200);
+            waterGeometry.rotateX(-Math.PI / 2);
+            const waterMaterial = new THREE.MeshStandardMaterial({
+                color: 0x0077be,
+                transparent: true,
+                opacity: 0.8
+            });
+            const water = new THREE.Mesh(waterGeometry, waterMaterial);
+            water.position.set(100, -1, 100);
+            water.userData = { type: 'water' };
+            scene.add(water);
+            
+            // Add a simple house
+            createHouse(50, 0, 20);
+        }
+
+        function createTree(x, y, z) {
+            // Adjust y position based on terrain height at this position
+            const terrainY = getTerrainHeight(x, z);
+            y = terrainY;
+            
+            // Create tree group
+            const treeGroup = new THREE.Group();
+            
+            // Create tree trunk (cylinder)
+            const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
+            const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.y = 2.5;
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+            
+            // Create tree top (cone)
+            const topGeometry = new THREE.ConeGeometry(3, 6, 8);
+            const topMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+            const top = new THREE.Mesh(topGeometry, topMaterial);
+            top.position.y = 8;
+            top.castShadow = true;
+            treeGroup.add(top);
+            
+            // Position the whole tree
+            treeGroup.position.set(x, y, z);
+            
+            // Add metadata for interaction
+            treeGroup.userData = { 
+                type: 'resource',
+                resourceType: 'tree',
+                health: 100
+            };
+            
+            scene.add(treeGroup);
+            world.resources.push(treeGroup);
+            
+            return treeGroup;
+        }
+
+        function createRock(x, y, z) {
+            // Adjust y position based on terrain height
+            const terrainY = getTerrainHeight(x, z);
+            y = terrainY;
+            
+            // Create a rock (icosahedron geometry for irregular shape)
+            const rockGeometry = new THREE.IcosahedronGeometry(Math.random() * 1.5 + 1, 0);
+            const rockMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x808080,
+                roughness: 0.9
+            });
+            const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+            rock.position.set(x, y + 1, z);
+            rock.castShadow = true;
+            rock.receiveShadow = true;
+            
+            // Add metadata for interaction
+            rock.userData = { 
+                type: 'resource',
+                resourceType: 'rock',
+                health: 100
+            };
+            
+            scene.add(rock);
+            world.resources.push(rock);
+            
+            return rock;
+        }
+
+        function createGrass(x, y, z) {
+            // Adjust y position based on terrain height
+            const terrainY = getTerrainHeight(x, z);
+            y = terrainY;
+            
+            // Create a grass patch group
+            const grassGroup = new THREE.Group();
+            
+            // Create multiple grass blades
+            const bladeCount = Math.floor(Math.random() * 10) + 5;
+            for (let i = 0; i < bladeCount; i++) {
+                const height = Math.random() * 0.5 + 0.5;
+                const width = 0.1;
+                
+                const bladeGeometry = new THREE.BoxGeometry(width, height, width);
+                const bladeMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x7CFC00,
+                    roughness: 0.8
+                });
+                
+                const blade = new THREE.Mesh(bladeGeometry, bladeMaterial);
+                
+                // Position each blade slightly randomly within the patch
+                const offsetX = Math.random() * 2 - 1;
+                const offsetZ = Math.random() * 2 - 1;
+                blade.position.set(offsetX, height / 2, offsetZ);
+                
+                // Rotate blade slightly for natural look
+                blade.rotation.y = Math.random() * Math.PI;
+                blade.rotation.x = Math.random() * 0.2 - 0.1;
+                blade.rotation.z = Math.random() * 0.2 - 0.1;
+                
+                grassGroup.add(blade);
+            }
+            
+            // Position the whole grass patch
+            grassGroup.position.set(x, y, z);
+            
+            // Add metadata for interaction
+            grassGroup.userData = { 
+                type: 'resource',
+                resourceType: 'grass',
+                health: 100
+            };
+            
+            scene.add(grassGroup);
+            world.resources.push(grassGroup);
+            
+            return grassGroup;
+        }
+
+        function createScrapMetal(x, y, z) {
+            // Adjust y position based on terrain height
+            const terrainY = getTerrainHeight(x, z);
+            y = terrainY;
+            
+            // Create a scrap metal pile group
+            const scrapGroup = new THREE.Group();
+            
+            // Create multiple scrap metal pieces
+            const pieceCount = Math.floor(Math.random() * 5) + 3;
+            for (let i = 0; i < pieceCount; i++) {
+                // Random size for each piece
+                const sizeX = Math.random() * 0.5 + 0.2;
+                const sizeY = Math.random() * 0.3 + 0.1;
+                const sizeZ = Math.random() * 0.5 + 0.2;
+                
+                const scrapGeometry = new THREE.BoxGeometry(sizeX, sizeY, sizeZ);
+                const scrapMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x555555,
+                    metalness: 0.8,
+                    roughness: 0.4
+                });
+                
+                const scrapPiece = new THREE.Mesh(scrapGeometry, scrapMaterial);
+                
+                // Position each piece slightly randomly within the pile
+                const offsetX = Math.random() * 1 - 0.5;
+                const offsetY = Math.random() * 0.5;
+                const offsetZ = Math.random() * 1 - 0.5;
+                scrapPiece.position.set(offsetX, offsetY, offsetZ);
+                
+                // Rotate piece randomly
+                scrapPiece.rotation.x = Math.random() * Math.PI;
+                scrapPiece.rotation.y = Math.random() * Math.PI;
+                scrapPiece.rotation.z = Math.random() * Math.PI;
+                
+                scrapGroup.add(scrapPiece);
+            }
+            
+            // Position the whole scrap pile
+            scrapGroup.position.set(x, y, z);
+            
+            // Add metadata for interaction
+            scrapGroup.userData = { 
+                type: 'resource',
+                resourceType: 'scrapMetal',
+                health: 100
+            };
+            
+            scene.add(scrapGroup);
+            world.resources.push(scrapGroup);
+            
+            return scrapGroup;
+        }
+
+        function createAnimal(x, y, z) {
+            // Adjust y position based on terrain height
+            const terrainY = getTerrainHeight(x, z);
+            y = terrainY;
+            
+            // Create an animal (simple deer-like shape)
+            const animalGroup = new THREE.Group();
+            
+            // Body
+            const bodyGeometry = new THREE.BoxGeometry(2, 1, 1);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 1.5;
+            animalGroup.add(body);
+            
+            // Head
+            const headGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+            const headMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.set(1.2, 2, 0);
+            animalGroup.add(head);
+            
+            // Legs
+            const legGeometry = new THREE.BoxGeometry(0.3, 1, 0.3);
+            const legMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            
+            const legFL = new THREE.Mesh(legGeometry, legMaterial);
+            legFL.position.set(0.7, 0.5, 0.4);
+            animalGroup.add(legFL);
+            
+            const legFR = new THREE.Mesh(legGeometry, legMaterial);
+            legFR.position.set(0.7, 0.5, -0.4);
+            animalGroup.add(legFR);
+            
+            const legBL = new THREE.Mesh(legGeometry, legMaterial);
+            legBL.position.set(-0.7, 0.5, 0.4);
+            animalGroup.add(legBL);
+            
+            const legBR = new THREE.Mesh(legGeometry, legMaterial);
+            legBR.position.set(-0.7, 0.5, -0.4);
+            animalGroup.add(legBR);
+            
+            // Position the whole animal
+            animalGroup.position.set(x, y, z);
+            animalGroup.rotation.y = Math.random() * Math.PI * 2;
+            
+            // Add metadata for interaction
+            animalGroup.userData = { 
+                type: 'animal',
+                resourceType: 'animal',
+                health: 100,
+                // Movement properties
+                speed: 0.02 + Math.random() * 0.03,
+                turnSpeed: 0.02,
+                movementTimer: 0,
+                movementDirection: new THREE.Vector3(
+                    Math.random() * 2 - 1,
+                    0,
+                    Math.random() * 2 - 1
+                ).normalize(),
+                state: 'idle', // idle, moving, fleeing
+                updateInterval: 30 + Math.floor(Math.random() * 50)
+            };
+            
+            scene.add(animalGroup);
+            world.animals.push(animalGroup);
+            
+            return animalGroup;
+        }
+
+        function createBarrel(x, y, z) {
+            // Adjust y position based on terrain height
+            const terrainY = getTerrainHeight(x, z);
+            y = terrainY;
+            
+            // Create a barrel
+            const barrelGeometry = new THREE.CylinderGeometry(1, 1, 2, 16);
+            const barrelMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x8B4513,
+                roughness: 0.7
+            });
+            const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+            barrel.position.set(x, y + 1, z);
+            barrel.castShadow = true;
+            barrel.receiveShadow = true;
+            
+            // Pre-generate loot for this barrel
+            const loot = generateBarrelLoot();
+            
+            // Add metadata for interaction
+            barrel.userData = { 
+                type: 'barrel',
+                loot: loot
+            };
+            
+            scene.add(barrel);
+            world.barrels.push(barrel);
+            
+            return barrel;
+        }
+
+        function createHouse(x, y, z) {
+            // Adjust y position based on terrain height
+            const terrainY = getTerrainHeight(x, z);
+            y = terrainY;
+            
+            // Create house group
+            const house = new THREE.Group();
+            
+            // Create house base (cube)
+            const baseGeometry = new THREE.BoxGeometry(10, 6, 10);
+            const baseMaterial = new THREE.MeshStandardMaterial({ color: 0xD2B48C });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            base.position.y = 3;
+            base.castShadow = true;
+            base.receiveShadow = true;
+            house.add(base);
+            
+            // Create roof (pyramid)
+            const roofGeometry = new THREE.ConeGeometry(7, 4, 4);
+            roofGeometry.rotateY(Math.PI / 4);
+            const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x8B0000 });
+            const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+            roof.position.y = 8;
+            roof.castShadow = true;
+            house.add(roof);
+            
+            // Create door
+            const doorGeometry = new THREE.PlaneGeometry(2, 3);
+            const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const door = new THREE.Mesh(doorGeometry, doorMaterial);
+            door.position.set(0, 1.5, 5.01);
+            house.add(door);
+            
+            // Create windows
+            const windowGeometry = new THREE.PlaneGeometry(1.5, 1.5);
+            const windowMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xADD8E6,
+                transparent: true,
+                opacity: 0.6
+            });
+            
+            const window1 = new THREE.Mesh(windowGeometry, windowMaterial);
+            window1.position.set(-3, 3, 5.01);
+            house.add(window1);
+            
+            const window2 = new THREE.Mesh(windowGeometry, windowMaterial);
+            window2.position.set(3, 3, 5.01);
+            house.add(window2);
+            
+            // Position the whole house
+            house.position.set(x, y, z);
+            house.userData = { type: 'house' };
+            scene.add(house);
+        }
+
+        function getTerrainHeight(x, z) {
+            // Cast ray from above to find terrain height at position
+            raycaster.set(
+                new THREE.Vector3(x, 100, z),
+                new THREE.Vector3(0, -1, 0)
+            );
+            const intersects = raycaster.intersectObject(terrain);
+            if (intersects.length > 0) {
+                return intersects[0].point.y;
+            }
+            return 0;
+        }
+
+        function generateBarrelLoot() {
+            // Generate random loot for a barrel
+            const loot = [];
+            const totalWeight = barrelLoot.reduce((sum, item) => sum + item.weight, 0);
+            
+            // Random number of items (1-3)
+            const itemCount = Math.floor(Math.random() * 3) + 1;
+            
+            for (let i = 0; i < itemCount; i++) {
+                // Choose item based on weight
+                const roll = Math.random() * totalWeight;
+                let runningWeight = 0;
+                
+                for (const item of barrelLoot) {
+                    runningWeight += item.weight;
+                    if (roll <= runningWeight) {
+                        // Found our item, determine quantity
+                        const quantity = Math.floor(Math.random() * (item.max - item.min + 1)) + item.min;
+                        loot.push({
+                            id: item.id,
+                            name: item.name,
+                            count: quantity
+                        });
+                        break;
+                    }
+                }
+            }
+            
+            return loot;
+        }
+
+        function initInventoryUI() {
+            // Create inventory slots
+            const inventoryGrid = document.querySelector('.inventory-grid');
+            
+            for (let i = 0; i < 24; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'inventory-slot';
+                slot.dataset.slot = i;
+                
+                inventoryGrid.appendChild(slot);
+            }
+        }
+
+        function updateStatusBars() {
+            // Update UI status bars based on player stats
+            healthBar.style.width = player.health + '%';
+            foodBar.style.width = player.food + '%';
+            waterBar.style.width = player.water + '%';
+            staminaBar.style.width = player.stamina + '%';
+        }
+
+        function updateInventoryUI() {
+            // Update quickbar
+            document.querySelectorAll('.quickbar-slot').forEach((slot, index) => {
+                const item = player.quickbar[index];
+                
+                // Clear slot
+                slot.textContent = '';
+                slot.className = 'quickbar-slot' + (index === player.activeSlot ? ' active' : '');
+                
+                // Add item if exists
+                if (item) {
+                    slot.textContent = item.name;
+                    
+                    if (item.count > 1) {
+                        const countEl = document.createElement('span');
+                        countEl.className = 'slot-count';
+                        countEl.textContent = item.count;
+                        slot.appendChild(countEl);
+                    }
+                }
+            });
+            
+            // Update inventory if open
+            if (isInventoryOpen) {
+                document.querySelectorAll('.inventory-slot').forEach((slot, index) => {
+                    const item = player.inventory[index];
+                    
+                    // Clear slot
+                    slot.textContent = '';
+                    
+                    // Add item if exists
+                    if (item) {
+                        slot.textContent = item.name;
+                        
+                        if (item.count > 1) {
+                            const countEl = document.createElement('span');
+                            countEl.className = 'slot-count';
+                            countEl.textContent = item.count;
+                            slot.appendChild(countEl);
+                        }
+                    }
+                });
+            }
+        }
+
+        function toggleInventory() {
+            isInventoryOpen = !isInventoryOpen;
+            inventoryPanel.style.display = isInventoryOpen ? 'block' : 'none';
+            
+            if (isInventoryOpen) {
+                document.exitPointerLock();
+                updateInventoryUI();
+            } else {
+                renderer.domElement.requestPointerLock();
+            }
+        }
+
+        function addItemToInventory(item) {
+            // First check if we can stack with existing items
+            const existingIndex = player.inventory.findIndex(
+                invItem => invItem && invItem.id === item.id
+            );
+            
+            if (existingIndex !== -1) {
+                // Stack with existing item
+                player.inventory[existingIndex].count += item.count;
+                return true;
+            }
+            
+            // Find first empty slot
+            const emptyIndex = player.inventory.findIndex(slot => !slot);
+            
+            if (emptyIndex !== -1) {
+                // Add to empty slot
+                player.inventory[emptyIndex] = {...item};
+                return true;
+            }
+            
+            // Inventory full
+            return false;
+        }
+
+        function useActiveItem() {
+            const activeItem = player.quickbar[player.activeSlot];
+            
+            if (!activeItem) return;
+            
+            // Handle different item types
+            if (activeItem.id === 'campfire') {
+                // Place campfire
+                const position = new THREE.Vector3();
+                position.copy(yawObject.position);
+                
+                // Place it a bit in front of the player
+                const direction = new THREE.Vector3(0, 0, -1);
+                direction.applyQuaternion(camera.quaternion);
+                position.addScaledVector(direction, 3);
+                
+                // Adjust Y to terrain height
+                position.y = getTerrainHeight(position.x, position.z);
+                
+                createCampfire(position.x, position.y, position.z);
+                
+                // Consume the item if not infinite
+                if (activeItem.count > 0) {
+                    activeItem.count--;
+                    if (activeItem.count <= 0) {
+                        player.quickbar[player.activeSlot] = null;
+                    }
+                }
+                
+                updateInventoryUI();
+            }
+        }
+
+        function createCampfire(x, y, z) {
+            // Create campfire group
+            const campfireGroup = new THREE.Group();
+            
+            // Create logs
+            const logGeometry = new THREE.CylinderGeometry(0.2, 0.2, 2, 8);
+            const logMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            
+            for (let i = 0; i < 4; i++) {
+                const log = new THREE.Mesh(logGeometry, logMaterial);
+                log.rotation.z = Math.PI / 2;
+                log.rotation.y = (Math.PI / 2) * i;
+                log.position.y = 0.2;
+                campfireGroup.add(log);
+            }
+            
+            // Create fire (cone)
+            const fireGeometry = new THREE.ConeGeometry(1, 2, 8);
+            const fireMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xFF5500,
+                transparent: true,
+                opacity: 0.8
+            });
+            const fire = new THREE.Mesh(fireGeometry, fireMaterial);
+            fire.position.y = 1;
+            campfireGroup.add(fire);
+            
+            // Add a point light for the fire
+            const fireLight = new THREE.PointLight(0xFF5500, 1, 10);
+            fireLight.position.y = 1;
+            campfireGroup.add(fireLight);
+            
+            // Position the campfire
+            campfireGroup.position.set(x, y, z);
+            
+            // Add metadata for interaction
+            campfireGroup.userData = { 
+                type: 'campfire',
+                remainingTime: 300 // 5 minutes in seconds
+            };
+            
+            scene.add(campfireGroup);
+            return campfireGroup;
+        }
+
+        function harvestResource(resource) {
+            const resourceType = resource.userData.resourceType;
+            const toolRequired = resourceTypes[resourceType].tool;
+            const activeItem = player.quickbar[player.activeSlot];
+            
+            // Check if player has the right tool
+            if (!activeItem || activeItem.id !== toolRequired) {
+                console.log(`Need ${toolRequired} to harvest ${resourceType}`);
+                return;
+            }
+            
+            // Apply damage to resource
+            resource.userData.health -= 25;
+            
+            // Check if resource is depleted
+            if (resource.userData.health <= 0) {
+                // Generate loot
+                const lootTable = resourceTypes[resourceType].yields;
+                
+                for (const lootItem of lootTable) {
+                    const quantity = Math.floor(Math.random() * (lootItem.max - lootItem.min + 1)) + lootItem.min;
+                    
+                    const item = {
+                        id: lootItem.id,
+                        name: lootItem.name,
+                        count: quantity
+                    };
+                    
+                    const added = addItemToInventory(item);
+                    if (added) {
+                        console.log(`Added ${quantity} ${lootItem.name}`);
+                    } else {
+                        console.log('Inventory full');
+                    }
+                }
+                
+                // Remove resource from world
+                scene.remove(resource);
+                world.resources = world.resources.filter(r => r !== resource);
+                
+                updateInventoryUI();
+            }
+        }
+
+        function openBarrel(barrel) {
+            const loot = barrel.userData.loot;
+            
+            // Add items to inventory
+            for (const item of loot) {
+                const added = addItemToInventory(item);
+                if (added) {
+                    console.log(`Added ${item.count} ${item.name}`);
+                } else {
+                    console.log('Inventory full');
+                }
+            }
+            
+            // Remove barrel from world
+            scene.remove(barrel);
+            world.barrels = world.barrels.filter(b => b !== barrel);
+            
+            updateInventoryUI();
+        }
+
+        function huntAnimal(animal) {
+            const toolRequired = resourceTypes['animal'].tool;
+            const activeItem = player.quickbar[player.activeSlot];
+            
+            // Check if player has the right tool
+            if (!activeItem || activeItem.id !== toolRequired) {
+                console.log(`Need ${toolRequired} to hunt animal`);
+                return;
+            }
+            
+            // Apply damage to animal
+            animal.userData.health -= 25;
+            animal.userData.state = 'fleeing';
+            
+            // Check if animal is defeated
+            if (animal.userData.health <= 0) {
+                // Generate loot
+                const lootTable = resourceTypes['animal'].yields;
+                
+                for (const lootItem of lootTable) {
+                    const quantity = Math.floor(Math.random() * (lootItem.max - lootItem.min + 1)) + lootItem.min;
+                    
+                    const item = {
+                        id: lootItem.id,
+                        name: lootItem.name,
+                        count: quantity
+                    };
+                    
+                    const added = addItemToInventory(item);
+                    if (added) {
+                        console.log(`Added ${quantity} ${lootItem.name}`);
+                    } else {
+                        console.log('Inventory full');
+                    }
+                }
+                
+                // Remove animal from world
+                scene.remove(animal);
+                world.animals = world.animals.filter(a => a !== animal);
+                
+                updateInventoryUI();
+            }
+        }
+
+        function drinkWater() {
+            // Refill water when in water
+            player.water = Math.min(100, player.water + 25);
+            console.log('Drank water');
+        }
+
+        function updateDayNightCycle(delta) {
+            // Update day/night cycle
+            world.dayTime += world.daySpeed * delta;
+            
+            // Reset and increment day when cycle completes
+            if (world.dayTime >= 1) {
+                world.dayTime = 0;
+                world.dayCount++;
+            }
+            
+            // Adjust lighting based on time
+            // 0.25 = noon (brightest), 0.75 = midnight (darkest)
+            let lightIntensity;
+            let skyColor;
+            
+            if (world.dayTime < 0.25) {
+                // Morning
+                lightIntensity = 0.2 + (world.dayTime / 0.25) * 0.8;
+                skyColor = new THREE.Color(
+                    0.4 + (world.dayTime / 0.25) * 0.6,
+                    0.4 + (world.dayTime / 0.25) * 0.6,
+                    0.5 + (world.dayTime / 0.25) * 0.5
+                );
+            } else if (world.dayTime < 0.5) {
+                // Afternoon
+                lightIntensity = 1.0 - ((world.dayTime - 0.25) / 0.25) * 0.2;
+                skyColor = new THREE.Color(1, 1, 1);
+            } else if (world.dayTime < 0.75) {
+                // Evening
+                lightIntensity = 0.8 - ((world.dayTime - 0.5) / 0.25) * 0.7;
+                skyColor = new THREE.Color(
+                    0.5 - ((world.dayTime - 0.5) / 0.25) * 0.5,
+                    0.4 - ((world.dayTime - 0.5) / 0.25) * 0.4,
+                    0.5 - ((world.dayTime - 0.5) / 0.25) * 0.3
+                );
+            } else {
+                // Night
+                lightIntensity = 0.1 + ((world.dayTime - 0.75) / 0.25) * 0.1;
+                skyColor = new THREE.Color(
+                    0.05 + ((world.dayTime - 0.75) / 0.25) * 0.35,
+                    0.05 + ((world.dayTime - 0.75) / 0.25) * 0.35,
+                    0.2 + ((world.dayTime - 0.75) / 0.25) * 0.3
+                );
+            }
+            
+            // Update sun light intensity
+            world.sunLight.intensity = lightIntensity;
+            
+            // Adjust sun position
+            world.sunLight.position.x = Math.cos(world.dayTime * Math.PI * 2) * 100;
+            world.sunLight.position.y = Math.sin(world.dayTime * Math.PI * 2) * 100;
+            
+            // Update sky color
+            scene.background = skyColor;
+            scene.fog.color = skyColor;
+            
+            // Update day night indicator
+            // Convert dayTime to hours/minutes
+            const hours = Math.floor(world.dayTime * 24);
+            const minutes = Math.floor((world.dayTime * 24 * 60) % 60);
+            dayNightIndicator.textContent = `Day ${world.dayCount} - ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
+
+        function updateAnimalMovement(delta) {
+            // Update animal movement
+            for (let i = 0; i < world.animals.length; i++) {
+                const animal = world.animals[i];
+                const animalData = animal.userData;
+                
+                animalData.movementTimer += 1;
+                
+                // Make movement decisions periodically
+                if (animalData.movementTimer >= animalData.updateInterval || animalData.state === 'fleeing') {
+                    animalData.movementTimer = 0;
+                    
+                    if (animalData.state === 'idle') {
+                        // Random chance to start moving
+                        if (Math.random() < 0.7) {
+                            animalData.state = 'moving';
+                            
+                            // Choose a new direction
+                            animalData.movementDirection.set(
+                                Math.random() * 2 - 1,
+                                0,
+                                Math.random() * 2 - 1
+                            ).normalize();
+                            
+                            // Set a random movement duration
+                            animalData.updateInterval = 30 + Math.floor(Math.random() * 50);
+                        }
+                    } else if (animalData.state === 'moving' || animalData.state === 'fleeing') {
+                        // Random chance to stop if not fleeing
+                        if (animalData.state !== 'fleeing' && Math.random() < 0.3) {
+                            animalData.state = 'idle';
+                            animalData.updateInterval = 20 + Math.floor(Math.random() * 30);
+                        } else {
+                            // Keep moving, but possibly change direction slightly
+                            if (animalData.state !== 'fleeing') {
+                                animalData.movementDirection.x += (Math.random() * 0.4 - 0.2);
+                                animalData.movementDirection.z += (Math.random() * 0.4 - 0.2);
+                                animalData.movementDirection.normalize();
+                            } else {
+                                // When fleeing, run away from player
+                                const toPlayer = new THREE.Vector3();
+                                toPlayer.subVectors(yawObject.position, animal.position).normalize();
+                                animalData.movementDirection.copy(toPlayer).multiplyScalar(-1);
+                                
+                                // Fleeing is faster
+                                animalData.speed = 0.08;
+                                
+                                // Chance to stop fleeing
+                                if (Math.random() < 0.05) {
+                                    animalData.state = 'moving';
+                                    animalData.speed = 0.02 + Math.random() * 0.03;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Apply movement if animal is moving
+                if (animalData.state === 'moving' || animalData.state === 'fleeing') {
+                    // Calculate new position
+                    const newPosition = animal.position.clone();
+                    newPosition.addScaledVector(animalData.movementDirection, animalData.speed);
+                    
+                    // Get terrain height at new position
+                    const terrainY = getTerrainHeight(newPosition.x, newPosition.z);
+                    newPosition.y = terrainY;
+                    
+                    // Rotate animal towards movement direction
+                    const targetRotation = Math.atan2(
+                        animalData.movementDirection.x,
+                        animalData.movementDirection.z
+                    );
+                    
+                    // Interpolate current rotation towards target
+                    let currentRotation = animal.rotation.y;
+                    const rotDiff = targetRotation - currentRotation;
+                    
+                    // Handle rotation wraparound
+                    let rotDelta = ((rotDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+                    animal.rotation.y += Math.sign(rotDelta) * Math.min(Math.abs(rotDelta), animalData.turnSpeed);
+                    
+                    // Apply movement
+                    animal.position.copy(newPosition);
+                }
+            }
+        }
+
+        function updatePlayerResources(delta) {
+            // Gradually decrease player resources
+            player.food = Math.max(0, player.food - 0.02 * delta);
+            player.water = Math.max(0, player.water - 0.03 * delta);
+            
+            // Slower decrease when not moving
+            if (controls.moveForward || controls.moveBackward || controls.moveLeft || controls.moveRight) {
+                player.food = Math.max(0, player.food - 0.01 * delta);
+                player.water = Math.max(0, player.water - 0.015 * delta);
+            }
+            
+            // Regenerate stamina when not sprinting
+            if (!controls.sprint) {
+                player.stamina = Math.min(100, player.stamina + 5 * delta);
+            }
+            
+            // Health consequences when food/water is low
+            if (player.food < 10 || player.water < 10) {
+                player.health = Math.max(0, player.health - 0.05 * delta);
+            }
+            
+            // Health regen when food and water are good
+            if (player.food > 50 && player.water > 50 && player.health < 100) {
+                player.health = Math.min(100, player.health + 0.1 * delta);
+            }
+        }
+
+        function onMouseDown(event) {
+            if (isInventoryOpen) return;
+            
+            // Handle interactions
+            const intersects = getIntersects();
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+                
+                // Traverse up to find parent with userData
+                let targetObject = object;
+                while (targetObject && (!targetObject.userData || !targetObject.userData.type)) {
+                    targetObject = targetObject.parent;
+                }
+                
+                if (targetObject && targetObject.userData && targetObject.userData.type) {
+                    const type = targetObject.userData.type;
+                    
+                    if (type === 'resource') {
+                        harvestResource(targetObject);
+                    } else if (type === 'animal') {
+                        huntAnimal(targetObject);
+                    } else if (type === 'barrel') {
+                        openBarrel(targetObject);
+                    } else if (type === 'water') {
+                        drinkWater();
+                    }
+                }
+            }
+            
+            // Use active item on right click
+            if (event.button === 2) {
+                useActiveItem();
+            }
+        }
+
+        function onMouseMove(event) {
+            if (isInventoryOpen) return;
+            
+            if (document.pointerLockElement === renderer.domElement) {
+                // Update camera rotation based on mouse movement
+                const movementX = event.movementX || 0;
+                const movementY = event.movementY || 0;
+                
+                yawObject.rotation.y -= movementX * player.turnSpeed;
+                pitchObject.rotation.x -= movementY * player.turnSpeed;
+                
+                // Limit pitch to avoid flipping
+                pitchObject.rotation.x = Math.max(
+                    -Math.PI / 2, 
+                    Math.min(Math.PI / 2, pitchObject.rotation.x)
+                );
+            }
+            
+            // Check for interactable objects
+            checkInteractable();
+        }
+
+        function onMouseWheel(event) {
+            // Scroll through quickbar slots
+            const delta = Math.sign(event.deltaY);
+            player.activeSlot = (player.activeSlot + delta + 8) % 8;
+            updateInventoryUI();
+        }
+
+        function onKeyDown(event) {
+            if (isInventoryOpen && event.code !== 'Tab' && event.code !== 'Escape') return;
+            
+            switch (event.code) {
+                case 'KeyW':
+                    controls.moveForward = true;
+                    break;
+                case 'KeyA':
+                    controls.moveLeft = true;
+                    break;
+                case 'KeyS':
+                    controls.moveBackward = true;
+                    break;
+                case 'KeyD':
+                    controls.moveRight = true;
+                    break;
+                case 'Space':
+                    if (player.canJump) {
+                        player.velocity.y = 10;
+                        player.canJump = false;
+                    }
+                    break;
+                case 'ShiftLeft':
+                    // Sprint when shift is held
+                    controls.sprint = true;
+                    break;
+                case 'KeyE':
+                    // Handle interaction
+                    if (interactableObject) {
+                        const type = interactableObject.userData.type;
+                        
+                        if (type === 'resource') {
+                            harvestResource(interactableObject);
+                        } else if (type === 'animal') {
+                            huntAnimal(interactableObject);
+                        } else if (type === 'barrel') {
+                            openBarrel(interactableObject);
+                        } else if (type === 'water') {
+                            drinkWater();
+                        }
+                    }
+                    break;
+                case 'Digit1':
+                case 'Digit2':
+                case 'Digit3':
+                case 'Digit4':
+                case 'Digit5':
+                case 'Digit6':
+                case 'Digit7':
+                case 'Digit8':
+                    // Switch active quickbar slot
+                    player.activeSlot = parseInt(event.code.charAt(5)) - 1;
+                    updateInventoryUI();
+                    break;
+                case 'Tab':
+                    // Toggle inventory
+                    event.preventDefault();
+                    toggleInventory();
+                    break;
+                case 'Escape':
+                    // Close inventory if open
+                    if (isInventoryOpen) {
+                        toggleInventory();
+                    }
+                    break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW':
+                    controls.moveForward = false;
+                    break;
+                case 'KeyA':
+                    controls.moveLeft = false;
+                    break;
+                case 'KeyS':
+                    controls.moveBackward = false;
+                    break;
+                case 'KeyD':
+                    controls.moveRight = false;
+                    break;
+                case 'ShiftLeft':
+                    controls.sprint = false;
+                    break;
+            }
+        }
+
+        function checkInteractable() {
+            // Cast a ray from camera for interactions
+            raycaster.setFromCamera(new THREE.Vector2(), camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            
+            // Reset interaction prompt
+            interactionPrompt.style.display = 'none';
+            interactableObject = null;
+            
+            if (intersects.length > 0) {
+                // Find first interactable object
+                for (let i = 0; i < intersects.length; i++) {
+                    const object = intersects[i].object;
+                    
+                    // Traverse up to find parent with userData
+                    let targetObject = object;
+                    while (targetObject && (!targetObject.userData || !targetObject.userData.type)) {
+                        targetObject = targetObject.parent;
+                    }
+                    
+                    if (targetObject && targetObject.userData && targetObject.userData.type) {
+                        // Check if interaction distance is within range (3 units)
+                        if (targetObject.position.distanceTo(yawObject.position) <= 4) {
+                            const type = targetObject.userData.type;
+                            
+                            if (['resource', 'animal', 'barrel', 'water'].includes(type)) {
+                                interactableObject = targetObject;
+                                
+                                // Show interaction prompt
+                                let action = 'interact with';
+                                if (type === 'resource') action = 'harvest';
+                                if (type === 'animal') action = 'hunt';
+                                if (type === 'barrel') action = 'open';
+                                if (type === 'water') action = 'drink from';
+                                
+                                interactionPrompt.textContent = `Press E to ${action} ${type}`;
+                                interactionPrompt.style.display = 'block';
+                                
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function getIntersects() {
+            // Cast a ray from camera for interactions
+            raycaster.setFromCamera(new THREE.Vector2(), camera);
+            return raycaster.intersectObjects(scene.children, true);
+        }
+
+        function updatePlayer(delta) {
+            // Apply sprint speed if sprinting and have stamina
+            let speed = player.speed;
+            if (controls.sprint && player.stamina > 0) {
+                speed *= 2;
+                player.stamina = Math.max(0, player.stamina - 10 * delta);
+            }
+            
+            player.velocity.y -= 9.8 * delta; // Apply gravity
+            
+            player.direction.z = Number(controls.moveForward) - Number(controls.moveBackward);
+            player.direction.x = Number(controls.moveRight) - Number(controls.moveLeft);
+            player.direction.normalize(); // Normalize for consistent movement speed
+            
+            // Rotate movement direction based on camera yaw
+            if (controls.moveForward || controls.moveBackward) {
+                player.velocity.z = -player.direction.z * speed;
+            } else {
+                player.velocity.z = 0;
+            }
+            
+            if (controls.moveLeft || controls.moveRight) {
+                player.velocity.x = -player.direction.x * speed;
+            } else {
+                player.velocity.x = 0;
+            }
+            
+            // Basic collision detection with ground
+            raycaster.ray.origin.copy(yawObject.position);
+            raycaster.ray.direction.set(0, -1, 0);
+            
+            const intersects = raycaster.intersectObject(terrain);
+            const onObject = intersects.length > 0 && intersects[0].distance <= player.height;
+            
+            if (onObject) {
+                player.velocity.y = Math.max(0, player.velocity.y);
+                player.canJump = true;
+                
+                // Adjust player height to follow terrain
+                yawObject.position.y = intersects[0].point.y + player.height;
+            }
+            
+            // Apply movement to player position
+            yawObject.translateX(player.velocity.x);
+            yawObject.position.y += player.velocity.y * delta;
+            yawObject.translateZ(player.velocity.z);
+            
+            // Enforce minimum height
+            if (yawObject.position.y < player.height) {
+                player.velocity.y = 0;
+                yawObject.position.y = player.height;
+                player.canJump = true;
+            }
+            
+            // Dampen movement
+            player.velocity.x *= 0.9;
+            player.velocity.z *= 0.9;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Calculate delta time
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000; // convert to seconds
+            
+            // Skip updates if inventory is open
+            if (!isInventoryOpen) {
+                // Update player position and handle collisions
+                updatePlayer(delta);
+                
+                // Update day/night cycle
+                updateDayNightCycle(delta);
+                
+                // Update animal movement
+                updateAnimalMovement(delta);
+                
+                // Update player resources
+                updatePlayerResources(delta);
+                
+                // Update UI
+                updateStatusBars();
+                updateInventoryUI();
+                
+                // Check interactable objects
+                checkInteractable();
+            }
+            
+            // Render scene
+            renderer.render(scene, camera);
+            
+            prevTime = time;
+        }
+    </script>
+</body>
+</html>
