@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Platform Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Health: <span id="health">100</span> | Score: <span id="score">0</span></div>
+    <div id="controls">
+        Controls: WASD to move | SHIFT to crawl | SPACE to jump | CLICK to shoot
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables
+        let scene, camera, renderer;
+        let player, platforms = [], ladders = [], enemies = [], bullets = [], enemyBullets = [];
+        let playerHealth = 100;
+        let score = 0;
+        let keys = {};
+        let isCrawling = false;
+        let isClimbing = false;
+        let playerSpeed = 0.1;
+        let gravity = 0.005;
+        let jumpForce = 0.3;
+        let playerVelocity = { x: 0, y: 0 };
+        let onGround = false;
+        let canJump = true;
+        let lastShot = 0;
+        let shootCooldown = 500; // ms
+        let enemyShootCooldown = 2000; // ms
+        let gameOver = false;
+
+        // Initialize the game
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+
+            // Create camera
+            camera = new THREE.OrthographicCamera(
+                window.innerWidth / -80, window.innerWidth / 80,
+                window.innerHeight / 80, window.innerHeight / -80,
+                1, 1000
+            );
+            camera.position.z = 10;
+
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Create player
+            const playerGeometry = new THREE.BoxGeometry(1, 2, 1);
+            const playerMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            player = new THREE.Mesh(playerGeometry, playerMaterial);
+            player.position.set(0, 10, 0);
+            scene.add(player);
+
+            // Create platforms
+            createPlatforms();
+
+            // Create ladders
+            createLadders();
+
+            // Create enemies
+            createEnemies();
+
+            // Event listeners
+            window.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+            window.addEventListener('keyup', (e) => { 
+                keys[e.key.toLowerCase()] = false;
+                if (e.key.toLowerCase() === 'shift') {
+                    isCrawling = false;
+                    player.scale.y = 1;
+                    player.position.y += 0.5;
+                }
+            });
+            window.addEventListener('mousedown', shootBullet);
+            window.addEventListener('resize', onWindowResize);
+
+            // Start animation loop
+            animate();
+        }
+
+        function createPlatforms() {
+            // Ground platform
+            createPlatform(0, 0, 30, 2);
+            
+            // Multiple platforms at different heights
+            createPlatform(-15, 5, 10, 1);
+            createPlatform(15, 5, 10, 1);
+            createPlatform(-5, 10, 10, 1);
+            createPlatform(5, 15, 10, 1);
+            createPlatform(-15, 20, 10, 1);
+            createPlatform(15, 20, 10, 1);
+        }
+
+        function createPlatform(x, y, width, height) {
+            const geometry = new THREE.BoxGeometry(width, height, 1);
+            const material = new THREE.MeshBasicMaterial({ color: 0x8B4513 }); // Brown color
+            const platform = new THREE.Mesh(geometry, material);
+            platform.position.set(x, y, 0);
+            platform.userData = { width, height };
+            scene.add(platform);
+            platforms.push(platform);
+        }
+
+        function createLadders() {
+            // Connect platforms with ladders
+            createLadder(-10, 1, 5); // Ground to first left platform
+            createLadder(10, 1, 5);  // Ground to first right platform
+            createLadder(0, 6, 5);   // First level to second level
+            createLadder(-10, 11, 5); // Second level to third level
+            createLadder(10, 16, 5);  // Third level to top level
+        }
+
+        function createLadder(x, y, height) {
+            const geometry = new THREE.BoxGeometry(1, height, 0.5);
+            const material = new THREE.MeshBasicMaterial({ color: 0x808080, transparent: true, opacity: 0.7 });
+            const ladder = new THREE.Mesh(geometry, material);
+            ladder.position.set(x, y + height/2, 0);
+            ladder.userData = { height };
+            scene.add(ladder);
+            ladders.push(ladder);
+        }
+
+        function createEnemies() {
+            // Create enemies on different platforms
+            createEnemy(-12, 7);
+            createEnemy(12, 7);
+            createEnemy(0, 12);
+            createEnemy(0, 17);
+            createEnemy(-12, 22);
+            createEnemy(12, 22);
+        }
+
+        function createEnemy(x, y) {
+            const geometry = new THREE.BoxGeometry(1, 1.5, 1);
+            const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const enemy = new THREE.Mesh(geometry, material);
+            enemy.position.set(x, y + 1, 0);
+            enemy.userData = { 
+                direction: Math.random() > 0.5 ? 1 : -1,
+                lastShot: 0,
+                speed: 0.03 + Math.random() * 0.02
+            };
+            scene.add(enemy);
+            enemies.push(enemy);
+        }
+
+        function onWindowResize() {
+            camera.left = window.innerWidth / -80;
+            camera.right = window.innerWidth / 80;
+            camera.top = window.innerHeight / 80;
+            camera.bottom = window.innerHeight / -80;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function checkPlayerPlatformCollision() {
+            onGround = false;
+            const playerBox = new THREE.Box3().setFromObject(player);
+            playerBox.min.y -= 0.1; // Check slightly below player
+
+            for (const platform of platforms) {
+                const platformBox = new THREE.Box3().setFromObject(platform);
+                if (playerBox.intersectsBox(platformBox) && 
+                    player.position.y > platform.position.y + platform.userData.height/2 &&
+                    playerVelocity.y <= 0) {
+                    player.position.y = platform.position.y + platform.userData.height/2 + player.geometry.parameters.height/2;
+                    playerVelocity.y = 0;
+                    onGround = true;
+                    canJump = true;
+                }
+            }
+        }
+
+        function checkPlayerLadderCollision() {
+            isClimbing = false;
+            const playerBox = new THREE.Box3().setFromObject(player);
+
+            for (const ladder of ladders) {
+                const ladderBox = new THREE.Box3().setFromObject(ladder);
+                if (playerBox.intersectsBox(ladderBox)) {
+                    if (keys['w']) {
+                        isClimbing = true;
+                        playerVelocity.y = playerSpeed;
+                        onGround = false;
+                    } else if (keys['s']) {
+                        isClimbing = true;
+                        playerVelocity.y = -playerSpeed;
+                    }
+                }
+            }
+        }
+
+        function shootBullet() {
+            if (gameOver) return;
+            
+            const now = Date.now();
+            if (now - lastShot < shootCooldown) return;
+            
+            lastShot = now;
+            
+            const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+            const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            
+            // Position bullet at player position
+            bullet.position.set(player.position.x, player.position.y, player.position.z);
+            
+            // Calculate bullet direction based on mouse position
+            const mouse = new THREE.Vector2(
+                (event.clientX / window.innerWidth) * 2 - 1,
+                -(event.clientY / window.innerHeight) * 2 + 1
+            );
+            
+            // Convert mouse position to 3D coordinates
+            const vector = new THREE.Vector3(mouse.x, mouse.y, 0);
+            vector.unproject(camera);
+            vector.sub(camera.position).normalize();
+            
+            // Set bullet direction
+            const direction = new THREE.Vector3();
+            direction.subVectors(vector, player.position).normalize();
+            
+            bullet.userData = { 
+                direction: direction,
+                speed: 0.5,
+                lifetime: 0
+            };
+            
+            scene.add(bullet);
+            bullets.push(bullet);
+        }
+
+        function enemyShoot(enemy) {
+            const now = Date.now();
+            if (now - enemy.userData.lastShot < enemyShootCooldown) return;
+            
+            enemy.userData.lastShot = now;
+            
+            const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+            const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            
+            // Position bullet at enemy position
+            bullet.position.set(enemy.position.x, enemy.position.y, enemy.position.z);
+            
+            // Calculate direction to player
+            const direction = new THREE.Vector3();
+            direction.subVectors(player.position, enemy.position).normalize();
+            
+            bullet.userData = { 
+                direction: direction,
+                speed: 0.3,
+                lifetime: 0
+            };
+            
+            scene.add(bullet);
+            enemyBullets.push(bullet);
+        }
+
+        function updateBullets(delta) {
+            // Update player bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                
+                // Move bullet
+                bullet.position.x += bullet.userData.direction.x * bullet.userData.speed;
+                bullet.position.y += bullet.userData.direction.y * bullet.userData.speed;
+                
+                // Check bullet lifetime
+                bullet.userData.lifetime += delta;
+                if (bullet.userData.lifetime > 1000) {
+                    scene.remove(bullet);
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check bullet-enemy collision
+                const bulletBox = new THREE.Box3().setFromObject(bullet);
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    const enemyBox = new THREE.Box3().setFromObject(enemy);
+                    
+                    if (bulletBox.intersectsBox(enemyBox)) {
+                        scene.remove(enemy);
+                        enemies.splice(j, 1);
+                        
+                        scene.remove(bullet);
+                        bullets.splice(i, 1);
+                        
+                        score += 10;
+                        document.getElementById('score').textContent = score;
+                        break;
+                    }
+                }
+            }
+            
+            // Update enemy bullets
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const bullet = enemyBullets[i];
+                
+                // Move bullet
+                bullet.position.x += bullet.userData.direction.x * bullet.userData.speed;
+                bullet.position.y += bullet.userData.direction.y * bullet.userData.speed;
+                
+                // Check bullet lifetime
+                bullet.userData.lifetime += delta;
+                if (bullet.userData.lifetime > 1000) {
+                    scene.remove(bullet);
+                    enemyBullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check bullet-player collision
+                const bulletBox = new THREE.Box3().setFromObject(bullet);
+                const playerBox = new THREE.Box3().setFromObject(player);
+                
+                if (bulletBox.intersectsBox(playerBox)) {
+                    scene.remove(bullet);
+                    enemyBullets.splice(i, 1);
+                    
+                    playerHealth -= 10;
+                    document.getElementById('health').textContent = playerHealth;
+                    
+                    if (playerHealth <= 0) {
+                        gameOver = true;
+                        alert("Game Over! Your score: " + score);
+                    }
+                }
+            }
+        }
+
+        function updateEnemies() {
+            for (const enemy of enemies) {
+                // Move enemy back and forth on platform
+                enemy.position.x += enemy.userData.direction * enemy.userData.speed;
+                
+                // Change direction if enemy reaches edge
+                if (Math.abs(enemy.position.x) > 14) {
+                    enemy.userData.direction *= -1;
+                }
+                
+                // Shoot at player if in range
+                const distanceToPlayer = enemy.position.distanceTo(player.position);
+                if (distanceToPlayer < 10) {
+                    enemyShoot(enemy);
+                }
+            }
+        }
+
+        function checkBoundaries() {
+            // Keep player within game boundaries
+            if (player.position.x < -20) player.position.x = -20;
+            if (player.position.x > 20) player.position.x = 20;
+            if (player.position.y < -20) {
+                player.position.set(0, 10, 0);
+                playerHealth -= 20;
+                document.getElementById('health').textContent = playerHealth;
+                
+                if (playerHealth <= 0) {
+                    gameOver = true;
+                    alert("Game Over! Your score: " + score);
+                }
+            }
+        }
+
+        function updatePlayer(delta) {
+            // Handle horizontal movement
+            if (keys['a']) {
+                playerVelocity.x = -playerSpeed * (isCrawling ? 0.5 : 1);
+            } else if (keys['d']) {
+                playerVelocity.x = playerSpeed * (isCrawling ? 0.5 : 1);
+            } else {
+                playerVelocity.x = 0;
+            }
+            
+            // Apply crawling
+            if (keys['shift'] && onGround && !isCrawling) {
+                isCrawling = true;
+                player.scale.y = 0.5;
+                player.position.y -= 0.5;
+            }
+            
+            // Apply jumping
+            if (keys[' '] && onGround && canJump && !isCrawling) {
+                playerVelocity.y = jumpForce;
+                onGround = false;
+                canJump = false;
+            }
+            
+            // Apply gravity if not climbing
+            if (!isClimbing && !onGround) {
+                playerVelocity.y -= gravity;
+            } else if (!isClimbing && onGround) {
+                playerVelocity.y = 0;
+            }
+            
+            // Update player position
+            player.position.x += playerVelocity.x;
+            player.position.y += playerVelocity.y;
+            
+            // Check collisions
+            checkPlayerPlatformCollision();
+            checkPlayerLadderCollision();
+            checkBoundaries();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (!gameOver) {
+                const delta = 16; // Approximate delta time (60 FPS)
+                
+                updatePlayer(delta);
+                updateEnemies();
+                updateBullets(delta);
+                
+                // Update camera to follow player
+                camera.position.x = player.position.x;
+                camera.position.y = player.position.y;
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
