@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Survival Game</title>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+        }
+        #gameCanvas { 
+            width: 100%; 
+            height: 100%; 
+            display: block; 
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            font-size: 18px;
+            pointer-events: none;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            line-height: 20px;
+            font-size: 20px;
+            pointer-events: none;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui">
+        Resources: <span id="resources">0</span><br>
+        Trees Chopped: <span id="treesChopped">0</span>
+    </div>
+    <div id="crosshair">+</div>
+    <div id="instructions">
+        WASD to move | Mouse to look | Click to chop trees
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables
+        let scene, camera, renderer;
+        let player = {
+            position: new THREE.Vector3(0, 2, 0),
+            velocity: new THREE.Vector3(),
+            onGround: true,
+            resources: 0,
+            treesChopped: 0,
+            chopping: false,
+            choppingAnimation: 0,
+            targetTree: null
+        };
+        let trees = [];
+        let controls = {
+            forward: false,
+            backward: false,
+            left: false,
+            right: false
+        };
+        
+        const WORLD_SIZE = 200;
+        const TREE_COUNT = 50;
+        const PLAYER_SPEED = 0.15;
+        const PLAYER_HEIGHT = 2;
+        const GRAVITY = 0.01;
+        const CHOP_DISTANCE = 5;
+        const CHOP_TIME = 40; // frames
+        const RESOURCES_PER_TREE = 5;
+        
+        // Arms model
+        let leftArm, rightArm;
+        let axe;
+        
+        // Initialize the game
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.rotation.order = 'YXZ'; // Proper rotation order for FPS controls
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ 
+                canvas: document.getElementById('gameCanvas'),
+                antialias: true 
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            
+            // Create lighting
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(100, 100, 100);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 500;
+            directionalLight.shadow.camera.left = -100;
+            directionalLight.shadow.camera.right = 100;
+            directionalLight.shadow.camera.top = 100;
+            directionalLight.shadow.camera.bottom = -100;
+            scene.add(directionalLight);
+            
+            // Create ground
+            const groundGeometry = new THREE.PlaneGeometry(WORLD_SIZE * 2, WORLD_SIZE * 2);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x4CAF50, // Green
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Create trees
+            createTrees();
+            
+            // Create player arms and axe
+            createPlayerArms();
+            
+            // Add event listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('mousemove', onMouseMove);
+            
+            // Lock pointer if supported
+            document.getElementById('gameCanvas').addEventListener('click', () => {
+                document.getElementById('gameCanvas').requestPointerLock();
+            });
+            
+            // Start animation loop
+            animate();
+        }
+        
+        function createTrees() {
+            // Tree geometry and materials
+            const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
+            const trunkMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x8B4513, // Brown
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            
+            const leavesGeometry = new THREE.ConeGeometry(2, 6, 8);
+            const leavesMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x228B22, // Forest Green
+                roughness: 0.8,
+                metalness: 0.1
+            });
+            
+            // Generate random trees
+            for (let i = 0; i < TREE_COUNT; i++) {
+                const treeGroup = new THREE.Group();
+                
+                // Create trunk
+                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                trunk.castShadow = true;
+                trunk.receiveShadow = true;
+                trunk.position.y = 2.5; // Half of trunk height
+                treeGroup.add(trunk);
+                
+                // Create leaves
+                const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+                leaves.castShadow = true;
+                leaves.position.y = 8; // Position above trunk
+                treeGroup.add(leaves);
+                
+                // Position the tree randomly
+                const x = (Math.random() - 0.5) * WORLD_SIZE;
+                const z = (Math.random() - 0.5) * WORLD_SIZE;
+                treeGroup.position.set(x, 0, z);
+                
+                // Store tree data
+                const tree = {
+                    object: treeGroup,
+                    position: new THREE.Vector3(x, 0, z),
+                    chopped: false
+                };
+                
+                trees.push(tree);
+                scene.add(treeGroup);
+            }
+        }
+        
+        function createPlayerArms() {
+            // Create arm group that will follow the camera
+            const armsGroup = new THREE.Group();
+            
+            // Create left arm
+            const armGeometry = new THREE.BoxGeometry(0.2, 0.6, 0.2);
+            const armMaterial = new THREE.MeshStandardMaterial({ color: 0xFFD700 }); // Player skin color
+            
+            leftArm = new THREE.Mesh(armGeometry, armMaterial);
+            leftArm.position.set(-0.4, -0.5, -0.7);
+            armsGroup.add(leftArm);
+            
+            // Create right arm
+            rightArm = new THREE.Mesh(armGeometry, armMaterial);
+            rightArm.position.set(0.4, -0.5, -0.7);
+            armsGroup.add(rightArm);
+            
+            // Create axe
+            const axeHandleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.8, 8);
+            const axeHeadGeometry = new THREE.BoxGeometry(0.3, 0.2, 0.05);
+            const woodMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const metalMaterial = new THREE.MeshStandardMaterial({ color: 0xC0C0C0, metalness: 0.8 });
+            
+            const axeHandle = new THREE.Mesh(axeHandleGeometry, woodMaterial);
+            const axeHead = new THREE.Mesh(axeHeadGeometry, metalMaterial);
+            axeHead.position.set(0, 0.35, 0);
+            axeHead.rotation.z = Math.PI / 2;
+            
+            axe = new THREE.Group();
+            axe.add(axeHandle);
+            axe.add(axeHead);
+            axe.position.set(0.6, -0.5, -0.9);
+            axe.rotation.set(Math.PI / 4, 0, 0);
+            armsGroup.add(axe);
+            
+            // Add arms to camera
+            camera.add(armsGroup);
+            scene.add(camera);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW':
+                    controls.forward = true;
+                    break;
+                case 'KeyS':
+                    controls.backward = true;
+                    break;
+                case 'KeyA':
+                    controls.left = true;
+                    break;
+                case 'KeyD':
+                    controls.right = true;
+                    break;
+            }
+        }
+        
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW':
+                    controls.forward = false;
+                    break;
+                case 'KeyS':
+                    controls.backward = false;
+                    break;
+                case 'KeyA':
+                    controls.left = false;
+                    break;
+                case 'KeyD':
+                    controls.right = false;
+                    break;
+            }
+        }
+        
+        function onMouseMove(event) {
+            if (document.pointerLockElement === document.getElementById('gameCanvas')) {
+                const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+                const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+                
+                camera.rotation.y -= movementX * 0.002;
+                camera.rotation.x -= movementY * 0.002;
+                
+                // Limit pitch (prevent looking too far up or down)
+                camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+            }
+        }
+        
+        function onMouseDown() {
+            if (!player.chopping) {
+                // Find closest tree
+                const closestTree = findClosestTree();
+                
+                if (closestTree && closestTree.distance < CHOP_DISTANCE && !closestTree.tree.chopped) {
+                    player.chopping = true;
+                    player.choppingAnimation = 0;
+                    player.targetTree = closestTree.tree;
+                }
+            }
+        }
+        
+        function findClosestTree() {
+            let closestTree = null;
+            let closestDistance = Infinity;
+            
+            // Get direction player is facing
+            const direction = new THREE.Vector3(0, 0, -1);
+            direction.applyQuaternion(camera.quaternion);
+            
+            // Ray from camera
+            const raycaster = new THREE.Raycaster(camera.position, direction);
+            
+            for (const tree of trees) {
+                if (tree.chopped) continue;
+                
+                // Check if ray intersects with tree
+                const intersects = raycaster.intersectObject(tree.object, true);
+                
+                if (intersects.length > 0) {
+                    const distance = intersects[0].distance;
+                    
+                    if (distance < closestDistance && distance < CHOP_DISTANCE) {
+                        closestDistance = distance;
+                        closestTree = tree;
+                    }
+                }
+                
+                // Also check direct distance for nearby trees
+                const directDistance = camera.position.distanceTo(tree.position);
+                if (directDistance < closestDistance && directDistance < CHOP_DISTANCE) {
+                    closestDistance = directDistance;
+                    closestTree = tree;
+                }
+            }
+            
+            return closestTree ? { tree: closestTree, distance: closestDistance } : null;
+        }
+        
+        function updatePlayer() {
+            // Calculate movement direction based on camera orientation
+            const direction = new THREE.Vector3();
+            
+            if (controls.forward) direction.z -= 1;
+            if (controls.backward) direction.z += 1;
+            if (controls.left) direction.x -= 1;
+            if (controls.right) direction.x += 1;
+            
+            if (direction.length() > 0) {
+                direction.normalize();
+                
+                // Apply camera rotation to movement direction (except Y axis)
+                direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), camera.rotation.y);
+                
+                // Update velocity
+                player.velocity.x = direction.x * PLAYER_SPEED;
+                player.velocity.z = direction.z * PLAYER_SPEED;
+            } else {
+                // Slow down
+                player.velocity.x *= 0.8;
+                player.velocity.z *= 0.8;
+                
+                // Stop completely if very slow
+                if (Math.abs(player.velocity.x) < 0.01) player.velocity.x = 0;
+                if (Math.abs(player.velocity.z) < 0.01) player.velocity.z = 0;
+            }
+            
+            // Apply gravity
+            if (!player.onGround) {
+                player.velocity.y -= GRAVITY;
+            }
+            
+            // Update position
+            player.position.add(player.velocity);
+            
+            // Apply position to camera
+            camera.position.copy(player.position);
+            
+            // Ground collision
+            if (player.position.y < PLAYER_HEIGHT) {
+                player.position.y = PLAYER_HEIGHT;
+                player.velocity.y = 0;
+                player.onGround = true;
+            }
+            
+            // Update chopping animation
+            if (player.chopping) {
+                updateChoppingAnimation();
+            } else {
+                // Reset arm positions when not chopping
+                resetArmPositions();
+            }
+        }
+        
+        function updateChoppingAnimation() {
+            if (player.choppingAnimation < CHOP_TIME) {
+                // Animation progress 0-1
+                const progress = player.choppingAnimation / CHOP_TIME;
+                
+                // First half - raising arms
+                if (progress < 0.5) {
+                    const upProgress = progress * 2; // 0-1 for up motion
+                    
+                    // Move arms up
+                    leftArm.rotation.x = -Math.PI * 0.3 * upProgress;
+                    rightArm.rotation.x = -Math.PI * 0.3 * upProgress;
+                    
+                    // Move axe up
+                    axe.rotation.set(
+                        Math.PI / 4 - Math.PI * 0.5 * upProgress,
+                        0,
+                        0
+                    );
+                } 
+                // Second half - chopping down
+                else {
+                    const downProgress = (progress - 0.5) * 2; // 0-1 for down motion
+                    
+                    // Move arms down quickly
+                    leftArm.rotation.x = -Math.PI * 0.3 + Math.PI * 0.6 * downProgress;
+                    rightArm.rotation.x = -Math.PI * 0.3 + Math.PI * 0.6 * downProgress;
+                    
+                    // Move axe down quickly
+                    axe.rotation.set(
+                        Math.PI / 4 - Math.PI * 0.5 + Math.PI * downProgress,
+                        0,
+                        0
+                    );
+                }
+                
+                player.choppingAnimation++;
+                
+                // Complete the chop at the end of animation
+                if (player.choppingAnimation >= CHOP_TIME) {
+                    completeChop();
+                }
+            }
+        }
+        
+        function resetArmPositions() {
+            // Reset arm and axe positions
+            if (leftArm) leftArm.rotation.set(0, 0, 0);
+            if (rightArm) rightArm.rotation.set(0, 0, 0);
+            if (axe) axe.rotation.set(Math.PI / 4, 0, 0);
+        }
+        
+        function completeChop() {
+            if (player.targetTree && !player.targetTree.chopped) {
+                // Add resources
+                player.resources += RESOURCES_PER_TREE;
+                player.treesChopped++;
+                
+                // Update UI
+                document.getElementById('resources').textContent = player.resources;
+                document.getElementById('treesChopped').textContent = player.treesChopped;
+                
+                // Mark tree as chopped and update its appearance
+                player.targetTree.chopped = true;
+                
+                // Make tree fall over
+                const treeObj = player.targetTree.object;
+                const fallDirection = Math.random() * Math.PI * 2;
+                
+                // Animate tree falling
+                const fallInterval = setInterval(() => {
+                    const fallSpeed = 0.03;
+                    if (treeObj.rotation.x < Math.PI / 2) {
+                        treeObj.rotation.x += fallSpeed;
+                        treeObj.position.z += Math.cos(fallDirection) * fallSpeed * 2.5;
+                        treeObj.position.x += Math.sin(fallDirection) * fallSpeed * 2.5;
+                    } else {
+                        clearInterval(fallInterval);
+                    }
+                }, 16);
+            }
+            
+            // Reset chopping state
+            player.chopping = false;
+            player.targetTree = null;
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            updatePlayer();
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
