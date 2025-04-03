@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Survival World</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Initial Settings Screen -->
+    <div id="settingsScreen">
+        <h2>Game Settings</h2>
+        <form id="settingsForm">
+            <label>Starting Wood: <input type="number" id="startWood" value="10" min="0"></label>
+            <label>Starting Stone: <input type="number" id="startStone" value="10" min="0"></label>
+            <label>Starting Food: <input type="number" id="startFood" value="5" min="0"></label>
+            <label>Starting Scrap: <input type="number" id="startScrap" value="5" min="0"></label>
+            <hr style="width: 200px; margin: 15px auto;">
+            <label>Player Speed: <input type="range" id="playerSpeed" min="200" max="800" value="400" step="50"></label>
+            <label>Player Height: <input type="range" id="playerHeight" min="5" max="20" value="10" step="1"></label>
+            <button type="submit">Start Game</button>
+        </form>
+    </div>
+
+    <!-- Blocker for Pointer Lock -->
+    <div id="blocker" style="display: none;">
+        <div id="instructions">
+            <p style="font-size: 36px">Click to play</p>
+            <p>
+                Move: W A S D<br/>
+                Jump: SPACE<br/>
+                Look: MOUSE<br/>
+                Interact: E<br/>
+                Inventory: TAB<br/>
+                Cycle Quickbar: 1-9<br/>
+            </p>
+        </div>
+    </div>
+
+    <!-- UI Elements -->
+    <div id="uiContainer">
+        <div id="quickBar">
+            <!-- Quick bar slots will be generated here -->
+        </div>
+        <div id="inventoryScreen">
+            <div id="inventoryGrid"><h3>Inventory</h3> <!-- Slots added dynamically --> </div>
+            <div id="craftingPanel"><h3>Crafting</h3> <!-- Items added dynamically --> </div>
+            <div id="containerGrid"><h3>Container</h3> <!-- Slots added dynamically --></div>
+        </div>
+        <div id="interactionPrompt">Press [E] to interact</div>
+        <div id="messageLog"></div>
+    </div>
+
+    <!-- Load Three.js core library from HTTPS CDN (fixed from HTTP) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Load PointerLockControls from HTTPS CDN (fixed from HTTP) -->
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/PointerLockControls.js"></script>
+
+    <!-- Load game scripts -->
+    <script src="js/utils/constants.js"></script>
+    <script src="js/utils/helpers.js"></script>
+    <script src="js/player/inventory.js"></script>
+    <script src="js/player/crafting.js"></script>
+    <script src="js/player/movement.js"></script>
+    <script src="js/world/objects.js"></script>
+    <script src="js/world/animals.js"></script>
+    <script src="js/world/worldGen.js"></script>
+    <script src="js/core/ui.js"></script>
+    <script src="js/core/inputs.js"></script>
+    <script src="js/core/renderer.js"></script>
+    <script src="js/core/game.js"></script>
+</body>
+</html>

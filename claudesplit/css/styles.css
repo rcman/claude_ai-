@@ -1,0 +1,204 @@
+body { 
+    margin: 0; 
+    overflow: hidden; 
+    background-color: #87CEEB; 
+    font-family: sans-serif;
+}
+
+canvas { 
+    display: block; 
+}
+
+#blocker, #settingsScreen {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    color: white;
+    font-size: 14px;
+    z-index: 10;
+}
+
+#instructions {
+    cursor: pointer;
+}
+
+#settingsScreen label, #settingsScreen input {
+     display: block; 
+     margin: 10px auto; 
+     text-align: left; 
+     width: 200px;
+}
+
+#settingsScreen input[type="number"], #settingsScreen input[type="range"] { 
+    width: 100px; 
+    float: right; 
+}
+
+#settingsScreen button { 
+    padding: 10px 20px; 
+    font-size: 16px; 
+    margin-top: 20px; 
+    cursor: pointer; 
+}
+
+/* UI Elements */
+#uiContainer {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    top: 10px;
+    color: white;
+    pointer-events: none; /* Allow clicks to pass through to canvas */
+    z-index: 5;
+    font-family: monospace;
+}
+
+#quickBar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    background-color: rgba(0, 0, 0, 0.5);
+    border: 1px solid grey;
+}
+
+.quickBarSlot {
+    width: 50px;
+    height: 50px;
+    border: 1px solid grey;
+    margin: 2px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 10px;
+    position: relative;
+}
+
+.quickBarSlot.selected { 
+    border: 2px solid yellow; 
+}
+
+.itemCount {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background-color: rgba(0,0,0,0.7);
+    padding: 1px 3px;
+    border-radius: 3px;
+    font-size: 10px;
+}
+
+#inventoryScreen {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    max-width: 700px;
+    height: 70%;
+    max-height: 500px;
+    background-color: rgba(50, 50, 50, 0.9);
+    border: 2px solid grey;
+    display: none; /* Hidden by default */
+    flex-direction: row; /* Changed for side-by-side layout */
+    padding: 15px;
+    box-sizing: border-box;
+    pointer-events: auto; /* Enable interaction */
+    z-index: 15;
+    justify-content: space-between;
+}
+
+#inventoryGrid, #craftingPanel, #containerGrid { 
+     width: 45%;
+     height: 100%;
+     overflow-y: auto;
+     border: 1px solid grey;
+     padding: 5px;
+     box-sizing: border-box;
+}
+
+#craftingPanel { 
+    width: 30%; 
+}
+
+#inventoryGrid { 
+    width: 35%; 
+}
+
+#containerGrid { 
+    width: 30%; 
+    display: none; /* Hidden by default */
+}
+
+.inventorySlot, .craftingItem, .containerSlot { 
+    width: 60px;
+    height: 60px;
+    border: 1px solid dimgray;
+    background-color: rgba(0,0,0,0.3);
+    margin: 3px;
+    display: inline-flex; /* Use inline-flex for grid */
+    justify-content: center;
+    align-items: center;
+    font-size: 11px;
+    position: relative;
+    cursor: pointer;
+    vertical-align: top;
+}
+
+.craftingItem {
+    width: 95%;
+    height: auto;
+    padding: 5px;
+    margin-bottom: 5px;
+    text-align: left;
+    display: block; /* List view for crafting */
+    background-color: rgba(70,70,70,0.8);
+}
+
+.craftingItem button {
+    float: right;
+    font-size: 10px;
+    padding: 2px 4px;
+    cursor: pointer;
+}
+
+.craftingItem span { 
+    font-size: 10px; 
+    color: #ccc; 
+    display: block; 
+}
+
+#interactionPrompt {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0,0,0,0.6);
+    padding: 8px 15px;
+    border-radius: 5px;
+    display: none; /* Hidden by default */
+}
+
+#messageLog {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    max-height: 150px;
+    overflow-y: hidden;
+    background-color: rgba(0,0,0,0.4);
+    padding: 5px;
+    width: 300px;
+}
+
+.logMessage { 
+    margin-bottom: 3px; 
+    font-size: 12px; 
+}
