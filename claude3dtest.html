@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>First-Person 3D Open World</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            margin-top: -10px;
+            margin-left: -10px;
+            color: white;
+            font-size: 20px;
+            text-align: center;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">First-Person 3D Open World<br>WASD to move, Mouse to look, E to interact</div>
+    <div id="crosshair">+</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Main variables
+        let camera, scene, renderer;
+        let terrain;
+        let player = {
+            height: 1.8,
+            speed: 0.1,
+            turnSpeed: 0.002,
+            canJump: true,
+            velocity: new THREE.Vector3(),
+            direction: new THREE.Vector3()
+        };
+        
+        // Controls state
+        const controls = {
+            moveForward: false,
+            moveBackward: false,
+            moveLeft: false,
+            moveRight: false,
+            jump: false
+        };
+
+        // Raycaster for collision detection
+        const raycaster = new THREE.Raycaster();
+        
+        // Mouse control variables
+        let pitchObject, yawObject;
+        let prevTime = performance.now();
+        
+        // Initialize the world
+        init();
+        animate();
+
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue
+            scene.fog = new THREE.Fog(0x87CEEB, 10, 750);
+
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            // Set up camera controls (pitch and yaw)
+            pitchObject = new THREE.Object3D();
+            pitchObject.add(camera);
+            
+            yawObject = new THREE.Object3D();
+            yawObject.position.y = player.height;
+            yawObject.add(pitchObject);
+            
+            scene.add(yawObject);
+
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0x666666);
+            scene.add(ambientLight);
+            
+            const sunLight = new THREE.DirectionalLight(0xFFFFFF, 0.8);
+            sunLight.position.set(50, 100, 50);
+            sunLight.castShadow = true;
+            scene.add(sunLight);
+
+            // Create terrain
+            createTerrain();
+            
+            // Create some objects in the world
+            createWorld();
+
+            // Set up renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Set up event listeners
+            document.addEventListener('mousedown', onMouseDown, false);
+            document.addEventListener('mousemove', onMouseMove, false);
+            document.addEventListener('keydown', onKeyDown, false);
+            document.addEventListener('keyup', onKeyUp, false);
+            
+            // Lock pointer on click
+            renderer.domElement.addEventListener('click', function() {
+                renderer.domElement.requestPointerLock();
+            });
+            
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function createTerrain() {
+            // Create a simple flat terrain for now
+            const terrainGeometry = new THREE.PlaneGeometry(1000, 1000, 100, 100);
+            terrainGeometry.rotateX(-Math.PI / 2);
+            
+            // Add some basic height variations (you could use more complex noise here)
+            const vertices = terrainGeometry.attributes.position.array;
+            for (let i = 0; i < vertices.length; i += 3) {
+                // Skip x and z coordinates (i and i+2)
+                vertices[i + 1] = Math.sin(vertices[i] / 10) * Math.cos(vertices[i + 2] / 10) * 5;
+            }
+            
+            // Update normals
+            terrainGeometry.computeVertexNormals();
+            
+            // Create terrain material (green for grass)
+            const terrainMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x4CAF50,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
+            terrain.receiveShadow = true;
+            scene.add(terrain);
+        }
+
+        function createWorld() {
+            // Add trees
+            for (let i = 0; i < 100; i++) {
+                createTree(
+                    Math.random() * 800 - 400,
+                    0,
+                    Math.random() * 800 - 400
+                );
+            }
+            
+            // Add rocks
+            for (let i = 0; i < 50; i++) {
+                createRock(
+                    Math.random() * 800 - 400,
+                    0,
+                    Math.random() * 800 - 400
+                );
+            }
+            
+            // Add water (a simple blue plane)
+            const waterGeometry = new THREE.PlaneGeometry(200, 200);
+            waterGeometry.rotateX(-Math.PI / 2);
+            const waterMaterial = new THREE.MeshStandardMaterial({
+                color: 0x0077be,
+                transparent: true,
+                opacity: 0.8
+            });
+            const water = new THREE.Mesh(waterGeometry, waterMaterial);
+            water.position.set(100, -1, 100);
+            scene.add(water);
+            
+            // Add a simple house
+            createHouse(50, 0, 20);
+        }
+
+        function createTree(x, y, z) {
+            // Create tree trunk (cylinder)
+            const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
+            const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.set(x, y + 2.5, z);
+            trunk.castShadow = true;
+            scene.add(trunk);
+            
+            // Create tree top (cone)
+            const topGeometry = new THREE.ConeGeometry(3, 6, 8);
+            const topMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+            const top = new THREE.Mesh(topGeometry, topMaterial);
+            top.position.set(x, y + 8, z);
+            top.castShadow = true;
+            scene.add(top);
+        }
+
+        function createRock(x, y, z) {
+            // Create a rock (icosahedron geometry for irregular shape)
+            const rockGeometry = new THREE.IcosahedronGeometry(Math.random() * 2 + 0.5, 0);
+            const rockMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x808080,
+                roughness: 0.9
+            });
+            const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+            rock.position.set(x, y + 0.5, z);
+            rock.castShadow = true;
+            rock.receiveShadow = true;
+            scene.add(rock);
+        }
+
+        function createHouse(x, y, z) {
+            // Create house group
+            const house = new THREE.Group();
+            
+            // Create house base (cube)
+            const baseGeometry = new THREE.BoxGeometry(10, 6, 10);
+            const baseMaterial = new THREE.MeshStandardMaterial({ color: 0xD2B48C });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            base.position.y = 3;
+            base.castShadow = true;
+            base.receiveShadow = true;
+            house.add(base);
+            
+            // Create roof (pyramid)
+            const roofGeometry = new THREE.ConeGeometry(7, 4, 4);
+            roofGeometry.rotateY(Math.PI / 4);
+            const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x8B0000 });
+            const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+            roof.position.y = 8;
+            roof.castShadow = true;
+            house.add(roof);
+            
+            // Create door
+            const doorGeometry = new THREE.PlaneGeometry(2, 3);
+            const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const door = new THREE.Mesh(doorGeometry, doorMaterial);
+            door.position.set(0, 1.5, 5.01);
+            house.add(door);
+            
+            // Create windows
+            const windowGeometry = new THREE.PlaneGeometry(1.5, 1.5);
+            const windowMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xADD8E6,
+                transparent: true,
+                opacity: 0.6
+            });
+            
+            const window1 = new THREE.Mesh(windowGeometry, windowMaterial);
+            window1.position.set(-3, 3, 5.01);
+            house.add(window1);
+            
+            const window2 = new THREE.Mesh(windowGeometry, windowMaterial);
+            window2.position.set(3, 3, 5.01);
+            house.add(window2);
+            
+            // Position the whole house
+            house.position.set(x, y, z);
+            scene.add(house);
+        }
+
+        function onMouseDown(event) {
+            // Handle interactions (e.g., shooting, picking up items)
+            const intersects = getIntersects();
+            if (intersects.length > 0) {
+                console.log('Interacted with object:', intersects[0].object);
+            }
+        }
+
+        function onMouseMove(event) {
+            if (document.pointerLockElement === renderer.domElement) {
+                // Update camera rotation based on mouse movement
+                const movementX = event.movementX || 0;
+                const movementY = event.movementY || 0;
+                
+                yawObject.rotation.y -= movementX * player.turnSpeed;
+                pitchObject.rotation.x -= movementY * player.turnSpeed;
+                
+                // Limit pitch to avoid flipping
+                pitchObject.rotation.x = Math.max(
+                    -Math.PI / 2, 
+                    Math.min(Math.PI / 2, pitchObject.rotation.x)
+                );
+            }
+        }
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW':
+                    controls.moveForward = true;
+                    break;
+                case 'KeyA':
+                    controls.moveLeft = true;
+                    break;
+                case 'KeyS':
+                    controls.moveBackward = true;
+                    break;
+                case 'KeyD':
+                    controls.moveRight = true;
+                    break;
+                case 'Space':
+                    if (player.canJump) {
+                        player.velocity.y = 10;
+                        player.canJump = false;
+                    }
+                    break;
+                case 'KeyE':
+                    // Handle interaction
+                    const intersects = getIntersects();
+                    if (intersects.length > 0) {
+                        console.log('Interacted with:', intersects[0].object);
+                    }
+                    break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW':
+                    controls.moveForward = false;
+                    break;
+                case 'KeyA':
+                    controls.moveLeft = false;
+                    break;
+                case 'KeyS':
+                    controls.moveBackward = false;
+                    break;
+                case 'KeyD':
+                    controls.moveRight = false;
+                    break;
+            }
+        }
+
+        function getIntersects() {
+            // Cast a ray from camera for interactions
+            raycaster.setFromCamera(new THREE.Vector2(), camera);
+            return raycaster.intersectObjects(scene.children, true);
+        }
+
+        function updatePlayer(delta) {
+            player.velocity.y -= 9.8 * delta; // Apply gravity
+            
+            player.direction.z = Number(controls.moveForward) - Number(controls.moveBackward);
+            player.direction.x = Number(controls.moveRight) - Number(controls.moveLeft);
+            player.direction.normalize(); // Normalize for consistent movement speed
+            
+            // Rotate movement direction based on camera yaw
+            if (controls.moveForward || controls.moveBackward) {
+                player.velocity.z = -player.direction.z * player.speed;
+            }
+            if (controls.moveLeft || controls.moveRight) {
+                player.velocity.x = -player.direction.x * player.speed;
+            }
+            
+            // Basic collision detection with ground
+            raycaster.ray.origin.copy(yawObject.position);
+            raycaster.ray.direction.set(0, -1, 0);
+            
+            const intersects = raycaster.intersectObject(terrain);
+            const onObject = intersects.length > 0 && intersects[0].distance <= player.height;
+            
+            if (onObject) {
+                player.velocity.y = Math.max(0, player.velocity.y);
+                player.canJump = true;
+                
+                // Adjust player height to follow terrain
+                yawObject.position.y = intersects[0].point.y + player.height;
+            }
+            
+            // Apply movement to player position
+            yawObject.translateX(player.velocity.x);
+            yawObject.position.y += player.velocity.y * delta;
+            yawObject.translateZ(player.velocity.z);
+            
+            // Enforce minimum height
+            if (yawObject.position.y < player.height) {
+                player.velocity.y = 0;
+                yawObject.position.y = player.height;
+                player.canJump = true;
+            }
+            
+            // Dampen movement
+            player.velocity.x *= 0.9;
+            player.velocity.z *= 0.9;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Calculate delta time
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000; // convert to seconds
+            
+            // Update player position and handle collisions
+            updatePlayer(delta);
+            
+            // Render scene
+            renderer.render(scene, camera);
+            
+            prevTime = time;
+        }
+    </script>
+</body>
+</html>
