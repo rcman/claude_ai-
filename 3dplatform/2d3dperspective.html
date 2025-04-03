@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Platform Game in Three.js</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #2a2a2a;
+        }
+        canvas {
+            display: block;
+            border: 2px solid #444;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: monospace;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            border-radius: 5px;
+        }
+        #health-bar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 200px;
+            height: 20px;
+            background-color: #333;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        #health {
+            width: 100%;
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        Controls:<br>
+        Left/Right Arrows: Move<br>
+        Up Arrow: Jump or Climb Up<br>
+        Down Arrow: Crouch or Climb Down<br>
+        Space: Shoot<br>
+        Health: 100/100
+    </div>
+    <div id="health-bar">
+        <div id="health"></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game constants
+        const GRAVITY = 0.4;
+        const JUMP_FORCE = 10;
+        const PLAYER_SPEED = 3;
+        const CLIMB_SPEED = 2;
+        const BULLET_SPEED = 7;
+        const ENEMY_BULLET_SPEED = 4;
+        const ENEMY_SHOOT_INTERVAL = 3000; // ms
+        const BULLET_LIFETIME = 2000; // ms
+
+        // Game state
+        let isJumping = false;
+        let isCrouching = false;
+        let isClimbing = false;
+        let isOnLadder = false;
+        let facing = 'right';
+        let lastShootTime = 0;
+        let playerHealth = 100;
+        let gameOver = false;
+
+        // Initialize Three.js
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+
+        const width = 800;
+        const height = 600;
+        const camera = new THREE.OrthographicCamera(
+            width / -2, width / 2, height / 2, height / -2, 1, 1000
+        );
+        camera.position.z = 100;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(width, height);
+        document.body.appendChild(renderer.domElement);
+
+        // Create game objects
+        const gameObjects = {
+            player: null,
+            platforms: [],
+            ladders: [],
+            playerBullets: [],
+            enemies: [],
+            enemyBullets: []
+        };
+
+        // Helper functions for object creation
+        function createPlayer(x, y) {
+            const playerGeometry = new THREE.BoxGeometry(30, 50, 1);
+            const playerMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const player = new THREE.Mesh(playerGeometry, playerMaterial);
+            player.position.set(x, y, 0);
+            player.userData = {
+                velocity: { x: 0, y: 0 },
+                originalHeight: 50,
+                crouchHeight: 25
+            };
+            scene.add(player);
+            return player;
+        }
+
+        function createPlatform(x, y, width, height) {
+            const platformGeometry = new THREE.BoxGeometry(width, height, 1);
+            const platformMaterial = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
+            const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+            platform.position.set(x, y, 0);
+            scene.add(platform);
+            return platform;
+        }
+
+        function createLadder(x, y, width, height) {
+            const ladderGeometry = new THREE.BoxGeometry(width, height, 1);
+            const ladderMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xA0522D,
+                transparent: true,
+                opacity: 0.8
+            });
+            const ladder = new THREE.Mesh(ladderGeometry, ladderMaterial);
+            ladder.position.set(x, y, 0);
+            scene.add(ladder);
+            
+            // Add ladder rungs for visual effect
+            const rungCount = Math.floor(height / 15);
+            for (let i = 0; i < rungCount; i++) {
+                const rungGeometry = new THREE.BoxGeometry(width + 5, 3, 1);
+                const rungMaterial = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
+                const rung = new THREE.Mesh(rungGeometry, rungMaterial);
+                rung.position.set(x, y - height/2 + i * 15 + 7.5, 1);
+                scene.add(rung);
+            }
+            
+            return ladder;
+        }
+
+        function createEnemy(x, y) {
+            const enemyGeometry = new THREE.BoxGeometry(30, 50, 1);
+            const enemyMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
+            enemy.position.set(x, y, 0);
+            enemy.userData = {
+                velocity: { x: 1, y: 0 },
+                direction: 1,
+                lastShootTime: 0
+            };
+            scene.add(enemy);
+            return enemy;
+        }
+
+        function createBullet(x, y, direction, isEnemy = false) {
+            const bulletGeometry = new THREE.CircleGeometry(5, 16);
+            const bulletMaterial = new THREE.MeshBasicMaterial({ 
+                color: isEnemy ? 0xff0000 : 0xffff00
+            });
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            bullet.position.set(x, y, 0);
+            bullet.userData = {
+                direction: direction,
+                isEnemy: isEnemy,
+                createdAt: Date.now()
+            };
+            scene.add(bullet);
+            return bullet;
+        }
+
+        // Initialize game objects
+        function initGame() {
+            // Create the player
+            gameObjects.player = createPlayer(0, 0);
+
+            // Create platforms at different levels
+            gameObjects.platforms = [
+                // Ground platform
+                createPlatform(0, -250, 800, 20),
+                
+                // Level 1 platforms
+                createPlatform(-200, -150, 250, 20),
+                createPlatform(200, -150, 250, 20),
+                
+                // Level 2 platforms
+                createPlatform(-250, -50, 200, 20),
+                createPlatform(250, -50, 200, 20),
+                
+                // Level 3 platforms
+                createPlatform(-150, 50, 300, 20),
+                createPlatform(200, 50, 200, 20),
+                
+                // Level 4 platform (top)
+                createPlatform(0, 150, 400, 20)
+            ];
+
+            // Create ladders connecting platforms
+            gameObjects.ladders = [
+                // Ground to level 1
+                createLadder(-100, -200, 20, 100),
+                createLadder(100, -200, 20, 100),
+                
+                // Level 1 to level 2
+                createLadder(-250, -100, 20, 100),
+                createLadder(250, -100, 20, 100),
+                
+                // Level 2 to level 3
+                createLadder(-150, 0, 20, 100),
+                createLadder(150, 0, 20, 100),
+                
+                // Level 3 to top
+                createLadder(0, 100, 20, 100)
+            ];
+
+            // Create enemies at different levels
+            gameObjects.enemies = [
+                createEnemy(-300, -140),
+                createEnemy(300, -140),
+                createEnemy(-200, -40),
+                createEnemy(200, -40),
+                createEnemy(-200, 60),
+                createEnemy(250, 60),
+                createEnemy(-150, 160)
+            ];
+        }
+
+        initGame();
+
+        // Collision detection
+        function checkCollision(obj1, obj2) {
+            const box1 = new THREE.Box3().setFromObject(obj1);
+            const box2 = new THREE.Box3().setFromObject(obj2);
+            return box1.intersectsBox(box2);
+        }
+
+        function isOnPlatform(object) {
+            // Create a small box just below the player to check if it's on a platform
+            const footBox = new THREE.Box3().setFromObject(object);
+            footBox.min.y -= 2;
+            footBox.max.y = object.position.y - object.geometry.parameters.height / 2 + 1;
+            
+            for (let platform of gameObjects.platforms) {
+                const platformBox = new THREE.Box3().setFromObject(platform);
+                if (footBox.intersectsBox(platformBox)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function isNearLadder(object) {
+            for (let ladder of gameObjects.ladders) {
+                if (checkCollision(object, ladder)) {
+                    return ladder;
+                }
+            }
+            return null;
+        }
+
+        // Handle keyboard input
+        const keys = {};
+        document.addEventListener('keydown', (event) => {
+            keys[event.key] = true;
+            
+            // Space key for shooting (only trigger once per press)
+            if (event.key === ' ' && !event.repeat && !gameOver) {
+                const now = Date.now();
+                if (now - lastShootTime > 500) {  // Cooldown
+                    lastShootTime = now;
+                    const bulletDirection = facing === 'right' ? 1 : -1;
+                    const bulletX = gameObjects.player.position.x + bulletDirection * 20;
+                    const bulletY = gameObjects.player.position.y;
+                    
+                    const bullet = createBullet(bulletX, bulletY, bulletDirection);
+                    gameObjects.playerBullets.push(bullet);
+                }
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            keys[event.key] = false;
+            
+            // Reset crouch when arrow down is released
+            if (event.key === 'ArrowDown' && isCrouching && !isClimbing) {
+                isCrouching = false;
+                gameObjects.player.geometry.parameters.height = gameObjects.player.userData.originalHeight;
+                gameObjects.player.scale.y = 1;
+                // Adjust position to avoid clipping through ground
+                gameObjects.player.position.y += (gameObjects.player.userData.originalHeight - gameObjects.player.userData.crouchHeight) / 2;
+            }
+        });
+
+        // Game loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (!gameOver) {
+                updatePlayer();
+                updateEnemies();
+                updateBullets();
+                checkGameOver();
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        function updatePlayer() {
+            // Check if player is on a ladder
+            const ladder = isNearLadder(gameObjects.player);
+            isOnLadder = !!ladder;
+            
+            // Handle climbing
+            if (isOnLadder && (keys['ArrowUp'] || keys['ArrowDown'])) {
+                isClimbing = true;
+                gameObjects.player.userData.velocity.y = 0;
+                
+                if (keys['ArrowUp']) {
+                    gameObjects.player.position.y += CLIMB_SPEED;
+                }
+                if (keys['ArrowDown']) {
+                    gameObjects.player.position.y -= CLIMB_SPEED;
+                }
+            } else {
+                isClimbing = false;
+            }
+            
+            // Handle horizontal movement if not climbing
+            if (!isClimbing) {
+                if (keys['ArrowLeft']) {
+                    gameObjects.player.userData.velocity.x = -PLAYER_SPEED;
+                    facing = 'left';
+                } else if (keys['ArrowRight']) {
+                    gameObjects.player.userData.velocity.x = PLAYER_SPEED;
+                    facing = 'right';
+                } else {
+                    gameObjects.player.userData.velocity.x = 0;
+                }
+            }
+            
+            // Handle jumping if on platform and not climbing
+            if (keys['ArrowUp'] && !isJumping && isOnPlatform(gameObjects.player) && !isClimbing) {
+                gameObjects.player.userData.velocity.y = JUMP_FORCE;
+                isJumping = true;
+            }
+            
+            // Handle crouching if on platform and not climbing
+            if (keys['ArrowDown'] && isOnPlatform(gameObjects.player) && !isClimbing) {
+                if (!isCrouching) {
+                    isCrouching = true;
+                    gameObjects.player.scale.y = 0.5;
+                    // Adjust position to avoid falling through ground
+                    gameObjects.player.position.y -= (gameObjects.player.userData.originalHeight - gameObjects.player.userData.crouchHeight) / 2;
+                }
+            }
+            
+            // Apply gravity if not climbing
+            if (!isClimbing) {
+                gameObjects.player.userData.velocity.y -= GRAVITY;
+            }
+            
+            // Update position
+            gameObjects.player.position.x += gameObjects.player.userData.velocity.x;
+            gameObjects.player.position.y += gameObjects.player.userData.velocity.y;
+            
+            // Check platform collisions
+            for (let platform of gameObjects.platforms) {
+                if (checkCollision(gameObjects.player, platform)) {
+                    // If falling onto platform
+                    if (gameObjects.player.userData.velocity.y < 0 && 
+                        gameObjects.player.position.y > platform.position.y) {
+                        gameObjects.player.position.y = platform.position.y + 
+                            platform.geometry.parameters.height/2 + 
+                            gameObjects.player.geometry.parameters.height/2 * (isCrouching ? 0.5 : 1);
+                        gameObjects.player.userData.velocity.y = 0;
+                        isJumping = false;
+                    }
+                }
+            }
+            
+            // Keep player within screen boundaries
+            const playerHalfWidth = gameObjects.player.geometry.parameters.width / 2;
+            if (gameObjects.player.position.x < -width/2 + playerHalfWidth) {
+                gameObjects.player.position.x = -width/2 + playerHalfWidth;
+            }
+            if (gameObjects.player.position.x > width/2 - playerHalfWidth) {
+                gameObjects.player.position.x = width/2 - playerHalfWidth;
+            }
+            
+            // Prevent falling below bottom platform
+            const bottomPlatform = gameObjects.platforms[0];
+            const floorY = bottomPlatform.position.y + 
+                bottomPlatform.geometry.parameters.height/2 + 
+                gameObjects.player.geometry.parameters.height/2;
+            
+            if (gameObjects.player.position.y < floorY) {
+                gameObjects.player.position.y = floorY;
+                gameObjects.player.userData.velocity.y = 0;
+                isJumping = false;
+            }
+        }
+
+        function updateEnemies() {
+            for (let enemy of gameObjects.enemies) {
+                // Basic enemy movement - patrol platforms
+                enemy.position.x += enemy.userData.velocity.x;
+                
+                // Check for platform edges to change direction
+                let onPlatform = false;
+                for (let platform of gameObjects.platforms) {
+                    const platformBox = new THREE.Box3().setFromObject(platform);
+                    
+                    // Check if enemy is on this platform
+                    if (enemy.position.y > platform.position.y && 
+                        enemy.position.y - enemy.geometry.parameters.height/2 <= platform.position.y + platform.geometry.parameters.height/2 &&
+                        Math.abs(enemy.position.x - platform.position.x) < platform.geometry.parameters.width/2) {
+                        onPlatform = true;
+                        
+                        // Check if about to walk off edge
+                        if (enemy.position.x + enemy.userData.direction * 20 > platform.position.x + platform.geometry.parameters.width/2 ||
+                            enemy.position.x + enemy.userData.direction * 20 < platform.position.x - platform.geometry.parameters.width/2) {
+                            enemy.userData.direction *= -1;
+                            enemy.userData.velocity.x *= -1;
+                        }
+                    }
+                }
+                
+                // Enemy shooting logic
+                const now = Date.now();
+                if (now - enemy.userData.lastShootTime > ENEMY_SHOOT_INTERVAL) {
+                    // Check if player is on same level (y-position)
+                    if (Math.abs(enemy.position.y - gameObjects.player.position.y) < 50) {
+                        enemy.userData.lastShootTime = now;
+                        
+                        // Determine direction to player
+                        const directionToPlayer = enemy.position.x < gameObjects.player.position.x ? 1 : -1;
+                        
+                        // Face player before shooting
+                        enemy.userData.direction = directionToPlayer;
+                        
+                        // Create enemy bullet
+                        const bulletX = enemy.position.x + directionToPlayer * 20;
+                        const bulletY = enemy.position.y;
+                        const bullet = createBullet(bulletX, bulletY, directionToPlayer, true);
+                        gameObjects.enemyBullets.push(bullet);
+                    }
+                }
+            }
+        }
+
+        function updateBullets() {
+            const now = Date.now();
+            
+            // Update player bullets
+            for (let i = gameObjects.playerBullets.length - 1; i >= 0; i--) {
+                const bullet = gameObjects.playerBullets[i];
+                
+                // Move bullet
+                bullet.position.x += bullet.userData.direction * BULLET_SPEED;
+                
+                // Check for enemy hits
+                for (let j = gameObjects.enemies.length - 1; j >= 0; j--) {
+                    if (checkCollision(bullet, gameObjects.enemies[j])) {
+                        // Remove hit enemy
+                        scene.remove(gameObjects.enemies[j]);
+                        gameObjects.enemies.splice(j, 1);
+                        
+                        // Remove bullet
+                        scene.remove(bullet);
+                        gameObjects.playerBullets.splice(i, 1);
+                        break;
+                    }
+                }
+                
+                // Remove bullets that hit platforms
+                for (let platform of gameObjects.platforms) {
+                    if (checkCollision(bullet, platform)) {
+                        scene.remove(bullet);
+                        gameObjects.playerBullets.splice(i, 1);
+                        break;
+                    }
+                }
+                
+                // Remove bullets that are offscreen or expired
+                if (bullet && (
+                    bullet.position.x < -width/2 || 
+                    bullet.position.x > width/2 || 
+                    now - bullet.userData.createdAt > BULLET_LIFETIME
+                )) {
+                    scene.remove(bullet);
+                    gameObjects.playerBullets.splice(i, 1);
+                }
+            }
+            
+            // Update enemy bullets
+            for (let i = gameObjects.enemyBullets.length - 1; i >= 0; i--) {
+                const bullet = gameObjects.enemyBullets[i];
+                
+                // Move bullet
+                bullet.position.x += bullet.userData.direction * ENEMY_BULLET_SPEED;
+                
+                // Check for player hit
+                if (checkCollision(bullet, gameObjects.player)) {
+                    // Reduce player health
+                    playerHealth -= 10;
+                    updateHealthUI();
+                    
+                    // Remove bullet
+                    scene.remove(bullet);
+                    gameObjects.enemyBullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Remove bullets that hit platforms
+                for (let platform of gameObjects.platforms) {
+                    if (checkCollision(bullet, platform)) {
+                        scene.remove(bullet);
+                        gameObjects.enemyBullets.splice(i, 1);
+                        break;
+                    }
+                }
+                
+                // Remove bullets that are offscreen or expired
+                if (bullet && (
+                    bullet.position.x < -width/2 || 
+                    bullet.position.x > width/2 || 
+                    now - bullet.userData.createdAt > BULLET_LIFETIME
+                )) {
+                    scene.remove(bullet);
+                    gameObjects.enemyBullets.splice(i, 1);
+                }
+            }
+        }
+
+        function updateHealthUI() {
+            document.getElementById('health').style.width = playerHealth + '%';
+            document.getElementById('info').innerHTML = `
+                Controls:<br>
+                Left/Right Arrows: Move<br>
+                Up Arrow: Jump or Climb Up<br>
+                Down Arrow: Crouch or Climb Down<br>
+                Space: Shoot<br>
+                Health: ${playerHealth}/100
+            `;
+        }
+
+        function checkGameOver() {
+            if (playerHealth <= 0) {
+                gameOver = true;
+                
+                // Display game over message
+                const infoElement = document.getElementById('info');
+                infoElement.innerHTML = `
+                    GAME OVER<br>
+                    Refresh to restart
+                `;
+                infoElement.style.color = 'red';
+                infoElement.style.fontSize = '24px';
+            }
+            
+            // Check win condition (all enemies defeated)
+            if (gameObjects.enemies.length === 0) {
+                gameOver = true;
+                
+                // Display win message
+                const infoElement = document.getElementById('info');
+                infoElement.innerHTML = `
+                    YOU WIN!<br>
+                    All enemies defeated<br>
+                    Refresh to play again
+                `;
+                infoElement.style.color = 'gold';
+                infoElement.style.fontSize = '24px';
+            }
+        }
+
+        // Start the game loop
+        animate();
+    </script>
+</body>
+</html>
