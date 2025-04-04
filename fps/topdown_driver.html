@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Top-Down Racing Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            user-select: none;
+        }
+        .start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            z-index: 200;
+        }
+        .start-screen h1 {
+            font-size: 3em;
+            margin-bottom: 30px;
+        }
+        .start-screen button {
+            padding: 15px 30px;
+            font-size: 1.5em;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .start-screen button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="hud">
+            <div id="lap-counter">Lap: 1/3</div>
+            <div id="timer">Time: 00:00:000</div>
+            <div id="position">Position: 1/4</div>
+        </div>
+        <div id="start-screen" class="start-screen">
+            <h1>3D Racing Game</h1>
+            <button id="start-button">Start Race</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables
+        let scene, camera, renderer;
+        let playerCar, aiCars = [];
+        let track, checkpoints = [];
+        let gameStarted = false;
+        let startTime, currentTime;
+        let playerLap = 1, totalLaps = 3;
+        let playerPosition = 1;
+        let lastCheckpoint = 0;
+        
+        // Car controls
+        const controls = {
+            forward: false,
+            backward: false,
+            left: false,
+            right: false
+        };
+        
+        // Initialize the game
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+            
+            // Create camera (top-down view)
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 50, 0);
+            camera.lookAt(0, 0, 0);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('game-container').appendChild(renderer.domElement);
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(200, 500, 300);
+            scene.add(directionalLight);
+            
+            // Create the track
+            createTrack();
+            
+            // Create player car
+            createPlayerCar();
+            
+            // Create AI cars
+            createAICars();
+            
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            
+            // Start button
+            document.getElementById('start-button').addEventListener('click', startGame);
+            
+            // Start animation loop
+            animate();
+        }
+        
+        // Create racing track
+        function createTrack() {
+            // Ground plane
+            const groundGeometry = new THREE.PlaneGeometry(200, 200);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x1E8449, // Green grass
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            scene.add(ground);
+            
+            // Create oval track
+            const trackShape = new THREE.Shape();
+            trackShape.absellipse(0, 0, 40, 60, 0, Math.PI * 2);
+            
+            const holePath = new THREE.Path();
+            holePath.absellipse(0, 0, 30, 50, 0, Math.PI * 2);
+            trackShape.holes.push(holePath);
+            
+            const trackGeometry = new THREE.ShapeGeometry(trackShape);
+            const trackMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x4A4A4A, // Asphalt color
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            track = new THREE.Mesh(trackGeometry, trackMaterial);
+            track.rotation.x = -Math.PI / 2;
+            track.position.y = 0.1; // Slightly above ground
+            scene.add(track);
+            
+            // Add checkpoints for lap counting (invisible)
+            const checkpointPositions = [
+                { x: 0, z: -60 },  // Start/finish line
+                { x: 40, z: 0 },   // Right side
+                { x: 0, z: 60 },   // Top
+                { x: -40, z: 0 }   // Left side
+            ];
+            
+            checkpointPositions.forEach((pos, index) => {
+                const checkpointGeometry = new THREE.BoxGeometry(5, 1, 10);
+                const checkpointMaterial = new THREE.MeshBasicMaterial({ 
+                    color: index === 0 ? 0xFFFFFF : 0xFF0000,
+                    transparent: true,
+                    opacity: 0.3
+                });
+                const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
+                checkpoint.position.set(pos.x, 0.2, pos.z);
+                checkpoint.userData = { checkpointIndex: index };
+                checkpoints.push(checkpoint);
+                scene.add(checkpoint);
+            });
+        }
+        
+        // Create player car
+        function createPlayerCar() {
+            // Car body
+            const carGeometry = new THREE.BoxGeometry(3, 1, 5);
+            const carMaterial = new THREE.MeshStandardMaterial({ color: 0xFF0000 }); // Red car
+            playerCar = new THREE.Mesh(carGeometry, carMaterial);
+            playerCar.position.set(0, 0.5, -45); // Starting position
+            playerCar.userData = { 
+                speed: 0,
+                maxSpeed: 0.5,
+                acceleration: 0.01,
+                deceleration: 0.005,
+                turnSpeed: 0.05,
+                lap: 1,
+                checkpointIndex: 0,
+                isPlayer: true
+            };
+            scene.add(playerCar);
+            
+            // Add car details (wheels, windshield, etc.)
+            const wheelGeometry = new THREE.CylinderGeometry(0.7, 0.7, 0.5, 16);
+            const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            
+            const wheelPositions = [
+                { x: -1.5, z: -1.5 },
+                { x: 1.5, z: -1.5 },
+                { x: -1.5, z: 1.5 },
+                { x: 1.5, z: 1.5 }
+            ];
+            
+            wheelPositions.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                wheel.position.set(pos.x, 0, pos.z);
+                wheel.rotation.x = Math.PI / 2;
+                playerCar.add(wheel);
+            });
+            
+            // Windshield
+            const windshieldGeometry = new THREE.BoxGeometry(2.5, 0.5, 2);
+            const windshieldMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x87CEFA,
+                transparent: true,
+                opacity: 0.7
+            });
+            const windshield = new THREE.Mesh(windshieldGeometry, windshieldMaterial);
+            windshield.position.set(0, 0.5, -0.5);
+            playerCar.add(windshield);
+        }
+        
+        // Create AI cars
+        function createAICars() {
+            const colors = [0x0000FF, 0xFFFF00, 0x00FF00]; // Blue, Yellow, Green
+            const startPositions = [
+                { x: 0, z: -40 },  // Behind player
+                { x: 4, z: -45 },  // Right of player
+                { x: -4, z: -45 }  // Left of player
+            ];
+            
+            for (let i = 0; i < 3; i++) {
+                const carGeometry = new THREE.BoxGeometry(3, 1, 5);
+                const carMaterial = new THREE.MeshStandardMaterial({ color: colors[i] });
+                const aiCar = new THREE.Mesh(carGeometry, carMaterial);
+                
+                aiCar.position.set(startPositions[i].x, 0.5, startPositions[i].z);
+                aiCar.userData = { 
+                    speed: 0.3 + (Math.random() * 0.1), // Random speed variation
+                    maxSpeed: 0.4 + (Math.random() * 0.05),
+                    turnSpeed: 0.04,
+                    lap: 1,
+                    checkpointIndex: 0,
+                    targetPoint: new THREE.Vector3(0, 0, -50), // Initial target
+                    isPlayer: false,
+                    id: i + 1 // AI car ID
+                };
+                
+                // Add wheels
+                const wheelGeometry = new THREE.CylinderGeometry(0.7, 0.7, 0.5, 16);
+                const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+                
+                const wheelPositions = [
+                    { x: -1.5, z: -1.5 },
+                    { x: 1.5, z: -1.5 },
+                    { x: -1.5, z: 1.5 },
+                    { x: 1.5, z: 1.5 }
+                ];
+                
+                wheelPositions.forEach(pos => {
+                    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    wheel.position.set(pos.x, 0, pos.z);
+                    wheel.rotation.x = Math.PI / 2;
+                    aiCar.add(wheel);
+                });
+                
+                // Windshield
+                const windshieldGeometry = new THREE.BoxGeometry(2.5, 0.5, 2);
+                const windshieldMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x87CEFA,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const windshield = new THREE.Mesh(windshieldGeometry, windshieldMaterial);
+                windshield.position.set(0, 0.5, -0.5);
+                aiCar.add(windshield);
+                
+                aiCars.push(aiCar);
+                scene.add(aiCar);
+            }
+        }
+        
+        // Handle window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Key down handler
+        function onKeyDown(event) {
+            switch (event.key.toLowerCase()) {
+                case 'w':
+                case 'arrowup':
+                    controls.forward = true;
+                    break;
+                case 's':
+                case 'arrowdown':
+                    controls.backward = true;
+                    break;
+                case 'a':
+                case 'arrowleft':
+                    controls.left = true;
+                    break;
+                case 'd':
+                case 'arrowright':
+                    controls.right = true;
+                    break;
+            }
+        }
+        
+        // Key up handler
+        function onKeyUp(event) {
+            switch (event.key.toLowerCase()) {
+                case 'w':
+                case 'arrowup':
+                    controls.forward = false;
+                    break;
+                case 's':
+                case 'arrowdown':
+                    controls.backward = false;
+                    break;
+                case 'a':
+                case 'arrowleft':
+                    controls.left = false;
+                    break;
+                case 'd':
+                case 'arrowright':
+                    controls.right = false;
+                    break;
+            }
+        }
+        
+        // Start the game
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            gameStarted = true;
+            startTime = Date.now();
+            
+            // Reset player and AI cars
+            playerCar.position.set(0, 0.5, -45);
+            playerCar.rotation.y = 0;
+            playerCar.userData.speed = 0;
+            playerCar.userData.lap = 1;
+            playerCar.userData.checkpointIndex = 0;
+            
+            for (let i = 0; i < aiCars.length; i++) {
+                const startPositions = [
+                    { x: 0, z: -40 },
+                    { x: 4, z: -45 },
+                    { x: -4, z: -45 }
+                ];
+                
+                aiCars[i].position.set(startPositions[i].x, 0.5, startPositions[i].z);
+                aiCars[i].rotation.y = 0;
+                aiCars[i].userData.lap = 1;
+                aiCars[i].userData.checkpointIndex = 0;
+            }
+        }
+        
+        // Update player car
+        function updatePlayerCar() {
+            if (!gameStarted) return;
+            
+            // Update speed based on controls
+            if (controls.forward) {
+                playerCar.userData.speed += playerCar.userData.acceleration;
+                if (playerCar.userData.speed > playerCar.userData.maxSpeed) {
+                    playerCar.userData.speed = playerCar.userData.maxSpeed;
+                }
+            } else if (controls.backward) {
+                playerCar.userData.speed -= playerCar.userData.acceleration;
+                if (playerCar.userData.speed < -playerCar.userData.maxSpeed / 2) {
+                    playerCar.userData.speed = -playerCar.userData.maxSpeed / 2;
+                }
+            } else {
+                // Decelerate when no input
+                if (playerCar.userData.speed > 0) {
+                    playerCar.userData.speed -= playerCar.userData.deceleration;
+                    if (playerCar.userData.speed < 0) playerCar.userData.speed = 0;
+                } else if (playerCar.userData.speed < 0) {
+                    playerCar.userData.speed += playerCar.userData.deceleration;
+                    if (playerCar.userData.speed > 0) playerCar.userData.speed = 0;
+                }
+            }
+            
+            // Turn based on controls
+            if (controls.left) {
+                playerCar.rotation.y += playerCar.userData.turnSpeed;
+            }
+            if (controls.right) {
+                playerCar.rotation.y -= playerCar.userData.turnSpeed;
+            }
+            
+            // Move car forward in the direction it's facing
+            playerCar.position.x += Math.sin(playerCar.rotation.y) * playerCar.userData.speed;
+            playerCar.position.z += Math.cos(playerCar.rotation.y) * playerCar.userData.speed;
+            
+            // Keep car on track (simple boundary check)
+            const distance = Math.sqrt(
+                playerCar.position.x * playerCar.position.x + 
+                playerCar.position.z * playerCar.position.z
+            );
+            
+            if (distance > 60 || distance < 20) {
+                // Slow down if off track
+                playerCar.userData.speed *= 0.9;
+            }
+            
+            // Check for checkpoint crossing
+            checkCheckpoints(playerCar);
+            
+            // Update camera position to follow player car
+            camera.position.set(
+                playerCar.position.x,
+                50,
+                playerCar.position.z
+            );
+        }
+        
+        // Update AI cars
+        function updateAICars() {
+            if (!gameStarted) return;
+            
+            aiCars.forEach(car => {
+                // Determine target point (next checkpoint)
+                const nextCheckpointIndex = (car.userData.checkpointIndex + 1) % checkpoints.length;
+                const targetCheckpoint = checkpoints[nextCheckpointIndex];
+                
+                // Calculate direction to target
+                const targetX = targetCheckpoint.position.x;
+                const targetZ = targetCheckpoint.position.z;
+                
+                // Calculate angle to target
+                const angleToTarget = Math.atan2(
+                    targetX - car.position.x,
+                    targetZ - car.position.z
+                );
+                
+                // Steer towards target
+                const angleDiff = normalizeAngle(angleToTarget - car.rotation.y);
+                
+                if (angleDiff > 0.05) {
+                    car.rotation.y += car.userData.turnSpeed;
+                } else if (angleDiff < -0.05) {
+                    car.rotation.y -= car.userData.turnSpeed;
+                }
+                
+                // Move forward
+                car.position.x += Math.sin(car.rotation.y) * car.userData.speed;
+                car.position.z += Math.cos(car.rotation.y) * car.userData.speed;
+                
+                // Check for checkpoint crossing
+                checkCheckpoints(car);
+                
+                // Add some randomness to AI driving
+                car.userData.speed = Math.min(
+                    car.userData.maxSpeed,
+                    car.userData.speed + (Math.random() * 0.01 - 0.005)
+                );
+            });
+        }
+        
+        // Normalize angle to range [-π, π]
+        function normalizeAngle(angle) {
+            while (angle > Math.PI) angle -= 2 * Math.PI;
+            while (angle < -Math.PI) angle += 2 * Math.PI;
+            return angle;
+        }
+        
+        // Check if a car crosses a checkpoint
+        function checkCheckpoints(car) {
+            checkpoints.forEach((checkpoint, index) => {
+                const distance = car.position.distanceTo(checkpoint.position);
+                
+                if (distance < 7) { // Checkpoint reached
+                    const expectedCheckpoint = (car.userData.checkpointIndex + 1) % checkpoints.length;
+                    
+                    if (index === expectedCheckpoint) {
+                        car.userData.checkpointIndex = index;
+                        
+                        // If crossing finish line (checkpoint 0), increment lap
+                        if (index === 0 && car.userData.lap < totalLaps) {
+                            car.userData.lap++;
+                            
+                            // Update UI for player
+                            if (car.userData.isPlayer) {
+                                document.getElementById('lap-counter').textContent = `Lap: ${car.userData.lap}/${totalLaps}`;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update race positions
+        function updatePositions() {
+            // Create an array of all cars
+            const allCars = [playerCar, ...aiCars];
+            
+            // Sort by lap and checkpoint progress
+            allCars.sort((a, b) => {
+                if (b.userData.lap !== a.userData.lap) {
+                    return b.userData.lap - a.userData.lap;
+                }
+                return b.userData.checkpointIndex - a.userData.checkpointIndex;
+            });
+            
+            // Find player position
+            for (let i = 0; i < allCars.length; i++) {
+                if (allCars[i].userData.isPlayer) {
+                    playerPosition = i + 1;
+                    document.getElementById('position').textContent = `Position: ${playerPosition}/${allCars.length}`;
+                    break;
+                }
+            }
+            
+            // Check for race completion
+            if (playerCar.userData.lap > totalLaps) {
+                endRace();
+            }
+        }
+        
+        // Format time (milliseconds to MM:SS:mmm)
+        function formatTime(ms) {
+            const minutes = Math.floor(ms / 60000);
+            const seconds = Math.floor((ms % 60000) / 1000);
+            const milliseconds = ms % 1000;
+            
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(milliseconds).padStart(3, '0')}`;
+        }
+        
+        // End the race
+        function endRace() {
+            gameStarted = false;
+            
+            // Show end screen
+            const endScreen = document.createElement('div');
+            endScreen.className = 'start-screen';
+            endScreen.innerHTML = `
+                <h1>Race Completed!</h1>
+                <p>Your Position: ${playerPosition}/4</p>
+                <p>Your Time: ${formatTime(currentTime - startTime)}</p>
+                <button id="restart-button">Race Again</button>
+            `;
+            
+            document.getElementById('game-container').appendChild(endScreen);
+            
+            // Add restart functionality
+            document.getElementById('restart-button').addEventListener('click', () => {
+                endScreen.remove();
+                startGame();
+            });
+        }
+        
+        // Update timer
+        function updateTimer() {
+            if (gameStarted) {
+                currentTime = Date.now();
+                const elapsedTime = currentTime - startTime;
+                document.getElementById('timer').textContent = `Time: ${formatTime(elapsedTime)}`;
+            }
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            updatePlayerCar();
+            updateAICars();
+            updatePositions();
+            updateTimer();
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Initialize the game
+        init();
+    </script>
+</body>
+</html>
