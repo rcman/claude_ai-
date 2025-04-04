@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Survival Game</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #blocker {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        #instructions {
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            text-align: center;
+        }
+        #settingsScreen {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            background-color: #222;
+            color: white;
+        }
+        #messageLog {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            width: 300px;
+            max-height: 150px;
+            overflow-y: auto;
+            background-color: rgba(0,0,0,0.6);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 10;
+        }
+        .logMessage {
+            margin: 3px 0;
+            transition: opacity 0.5s;
+        }
+        .success { color: #90EE90; }
+        .warning { color: #FFFF66; }
+        .error { color: #FFA07A; }
+        .removed { color: #FFC0CB; }
+        #quickBar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.6);
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            gap: 5px;
+            z-index: 10;
+        }
+        .quickBarSlot {
+            width: 40px;
+            height: 40px;
+            background-color: rgba(255,255,255,0.2);
+            border: 1px solid dimgray;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            color: white;
+            position: relative;
+        }
+        .quickBarSlot.selected {
+            border: 1px solid white;
+            background-color: rgba(255,255,255,0.3);
+        }
+        .itemCount {
+            position: absolute;
+            bottom: 0;
+            right: 2px;
+            font-size: 10px;
+            color: white;
+        }
+        #interactionPrompt {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            background-color: rgba(0,0,0,0.6);
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 16px;
+            z-index: 10;
+            display: none;
+        }
+        #inventoryScreen {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 100;
+        }
+        #inventoryContainer {
+            display: flex;
+            gap: 20px;
+            max-width: 90%;
+            max-height: 90%;
+        }
+        #inventoryGrid, #craftingPanel, #containerGrid {
+            background-color: rgba(50,50,50,0.9);
+            padding: 10px;
+            border-radius: 5px;
+            min-width: 200px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .inventorySlot, .containerSlot {
+            width: 100px;
+            height: 30px;
+            background-color: rgba(70,70,70,0.8);
+            border: 1px solid dimgray;
+            margin: 5px;
+            padding: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .craftingItem {
+            padding: 10px;
+            background-color: rgba(70,70,70,0.8);
+            border-radius: 3px;
+            margin-bottom: 5px;
+            color: white;
+            font-size: 14px;
+        }
+        .craftingItem span {
+            display: block;
+            font-size: 12px;
+            color: #CCC;
+            margin-top: 5px;
+        }
+        .craftingItem button {
+            margin-left: 10px;
+            padding: 2px 8px;
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .craftingItem button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        h3 {
+            color: white;
+            margin-top: 0;
+            border-bottom: 1px solid #555;
+            padding-bottom: 5px;
+        }
+        #hud {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+        #saveButton, #loadButton {
+            background-color: rgba(0,0,0,0.6);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <!-- Game Container -->
+    <div id="settingsScreen">
+        <div style="width: 400px; padding: 20px;">
+            <h2>Game Settings</h2>
+            <form id="settingsForm">
+                <div style="margin-bottom: 15px;">
+                    <label>Player Speed: </label>
+                    <input type="range" id="playerSpeed" min="1" max="10" value="5" step="0.5">
+                    <span id="speedValue">5</span>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label>Player Height: </label>
+                    <input type="range" id="playerHeight" min="0.5" max="2" value="1" step="0.1">
+                    <span id="heightValue">1.0</span>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <h3>Starting Resources</h3>
+                    <label>Wood: </label>
+                    <input type="number" id="startWood" min="0" max="50" value="10">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label>Stone: </label>
+                    <input type="number" id="startStone" min="0" max="50" value="5">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label>Food: </label>
+                    <input type="number" id="startFood" min="0" max="20" value="3">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label>Scrap Metal: </label>
+                    <input type="number" id="startScrap" min="0" max="20" value="0">
+                </div>
+                <button type="submit" style="padding: 10px 20px; background-color: #4CAF50; border: none; color: white; cursor: pointer; border-radius: 5px;">Start Game</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="blocker" style="display: none;">
+        <div id="instructions">
+            <h1>Survival Game</h1>
+            <p>Click to play</p>
+            <p>Move: WASD / Arrow Keys</p>
+            <p>Jump: SPACE</p>
+            <p>Interact: E</p>
+            <p>Inventory: I</p>
+            <p>Quick Slot: 1-9 or Mousewheel</p>
+        </div>
+    </div>
+
+    <div id="hud">
+        <button id="saveButton">Save Game</button>
+        <button id="loadButton">Load Game</button>
+    </div>
+
+    <div id="quickBar"></div>
+    <div id="messageLog"></div>
+    <div id="interactionPrompt"></div>
+
+    <div id="inventoryScreen">
+        <div id="inventoryContainer">
+            <div id="inventoryGrid">
+                <h3>Inventory</h3>
+            </div>
+            <div id="craftingPanel">
+                <h3>Crafting</h3>
+            </div>
+            <div id="containerGrid" style="display: none;">
+                <h3>Container</h3>
+            </div>
+        </div>
+    </div>
+
+    <!-- THREE.js library (MUST come before your game scripts) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.min.js"></script>
+
+    <!-- Global error handler script -->
+    <script>
+    window.addEventListener('error', function(event) {
+        console.error('Script error detected:', event.error);
+        if (event.error && event.error.message) {
+            console.error('Error message:', event.error.message);
+        }
+    }, true);
+    </script>
+
+    <!-- Load game scripts in the correct order -->
+    <script src="ui-messages.js"></script>
+    <script src="world-generator.js"></script> 
+    <script src="inventory-system.js"></script>
+    <script src="ui-quickbar.js"></script>
+    <script src="ui-inventory.js"></script>
+    <script src="world-objects.js"></script>
+    <script src="world-objects-nature.js"></script>
+    <script src="world-objects-structures.js"></script>
+    <script src="world-objects-animals.js"></script>
+    <script src="animal-behavior.js"></script>
+    <script src="crafting-system.js"></script>
+    <script src="save-system.js"></script>
+    <script src="player-control.js"></script>
+    <script src="interaction-system.js"></script>
+    <script src="input-handler.js"></script>
+    <script src="game-engine.js"></script>
+    <script src="ui-manager.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
