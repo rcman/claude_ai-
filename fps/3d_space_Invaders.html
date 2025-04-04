@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Space Invaders</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: white;
+            font-family: 'Courier New', monospace;
+        }
+        #gameCanvas {
+            display: block;
+        }
+        #gameUI {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 20px;
+        }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            text-align: center;
+            display: none;
+        }
+        #startScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            text-align: center;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 20px 2px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameUI">SCORE: <span id="score">0</span> | LIVES: <span id="lives">3</span></div>
+    <div id="gameOver">GAME OVER<br><button id="restartButton">PLAY AGAIN</button></div>
+    <div id="startScreen">
+        <h1>SPACE INVADERS 3D</h1>
+        <p>Move: LEFT/RIGHT ARROW KEYS<br>Shoot: SPACE</p>
+        <button id="startButton">START GAME</button>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables
+        let scene, camera, renderer;
+        let player, playerLight;
+        let invaders = [];
+        let bullets = [];
+        let enemyBullets = [];
+        let gameState = 'start'; // 'start', 'playing', 'gameOver'
+        let score = 0;
+        let lives = 3;
+        let lastShootTime = 0;
+        let invaderDirection = 1;
+        let invaderSpeed = 0.05;
+        let invaderDropDistance = 0.5;
+        let invaderShootFrequency = 0.005;
+        
+        // Game boundaries
+        const GAME_WIDTH = 20;
+        const GAME_HEIGHT = 30;
+        
+        // Key states
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            Space: false
+        };
+        
+        // Initialize the game
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+            
+            // Add ambient light
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            
+            // Add directional light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight.position.set(0, 1, 1);
+            scene.add(directionalLight);
+            
+            // Set up camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 10, 20);
+            camera.lookAt(0, 0, 0);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+            renderer.domElement.id = 'gameCanvas';
+            
+            // Create starfield background
+            createStarfield();
+            
+            // Create game objects
+            createPlayer();
+            createInvaders();
+            
+            // Set up event listeners
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            window.addEventListener('resize', handleResize);
+            
+            document.getElementById('startButton').addEventListener('click', startGame);
+            document.getElementById('restartButton').addEventListener('click', restartGame);
+            
+            // Start animation loop
+            animate();
+        }
+        
+        function createStarfield() {
+            const starGeometry = new THREE.BufferGeometry();
+            const starMaterial = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: 0.1
+            });
+            
+            const starVertices = [];
+            for (let i = 0; i < 1000; i++) {
+                const x = (Math.random() - 0.5) * 100;
+                const y = (Math.random() - 0.5) * 100;
+                const z = (Math.random() - 0.5) * 100;
+                starVertices.push(x, y, z);
+            }
+            
+            starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+            const stars = new THREE.Points(starGeometry, starMaterial);
+            scene.add(stars);
+        }
+        
+        function createPlayer() {
+            // Create player ship
+            const geometry = new THREE.ConeGeometry(1, 2, 3);
+            geometry.rotateX(Math.PI);
+            const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+            player = new THREE.Mesh(geometry, material);
+            player.position.set(0, 0, 0);
+            scene.add(player);
+            
+            // Add light to player
+            playerLight = new THREE.PointLight(0x00ff00, 1, 10);
+            playerLight.position.set(0, 0.5, 0);
+            player.add(playerLight);
+        }
+        
+        function createInvaders() {
+            const rows = 4;
+            const cols = 8;
+            const spacing = 2;
+            
+            const invaderColors = [0xff0000, 0xff6600, 0xffcc00, 0x00ccff];
+            
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    // Create invader geometry based on row
+                    let geometry;
+                    if (row === 0) {
+                        geometry = new THREE.OctahedronGeometry(0.5);
+                    } else if (row === 1) {
+                        geometry = new THREE.TetrahedronGeometry(0.6);
+                    } else {
+                        geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+                    }
+                    
+                    const material = new THREE.MeshPhongMaterial({ color: invaderColors[row] });
+                    const invader = new THREE.Mesh(geometry, material);
+                    
+                    // Position invader
+                    const x = (col - (cols - 1) / 2) * spacing;
+                    const y = 10 - row * spacing;
+                    const z = -5;
+                    invader.position.set(x, y, z);
+                    
+                    // Add point light to invader
+                    const light = new THREE.PointLight(invaderColors[row], 0.5, 3);
+                    light.position.set(0, 0, 0);
+                    invader.add(light);
+                    
+                    // Add to scene and invaders array
+                    scene.add(invader);
+                    invaders.push(invader);
+                }
+            }
+        }
+        
+        function shootBullet() {
+            const currentTime = Date.now();
+            if (currentTime - lastShootTime < 300) return; // Limit firing rate
+            
+            lastShootTime = currentTime;
+            
+            const geometry = new THREE.CylinderGeometry(0.1, 0.1, 1);
+            const material = new THREE.MeshPhongMaterial({ color: 0x00ff00, emissive: 0x00ff00 });
+            const bullet = new THREE.Mesh(geometry, material);
+            
+            // Position bullet at player position
+            bullet.position.copy(player.position);
+            bullet.position.y += 1;
+            
+            // Add to scene and bullets array
+            scene.add(bullet);
+            bullets.push(bullet);
+            
+            // Add light to bullet
+            const bulletLight = new THREE.PointLight(0x00ff00, 1, 2);
+            bulletLight.position.set(0, 0, 0);
+            bullet.add(bulletLight);
+        }
+        
+        function shootEnemyBullet(invader) {
+            const geometry = new THREE.CylinderGeometry(0.1, 0.1, 1);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0xff0000, 
+                emissive: 0xff0000 
+            });
+            const bullet = new THREE.Mesh(geometry, material);
+            
+            // Position bullet at invader position
+            bullet.position.copy(invader.position);
+            bullet.position.y -= 1;
+            
+            // Add to scene and enemy bullets array
+            scene.add(bullet);
+            enemyBullets.push(bullet);
+            
+            // Add light to bullet
+            const bulletLight = new THREE.PointLight(0xff0000, 1, 2);
+            bulletLight.position.set(0, 0, 0);
+            bullet.add(bulletLight);
+        }
+        
+        function updatePlayer() {
+            // Move player based on key states
+            if (keys.ArrowLeft && player.position.x > -GAME_WIDTH/2) {
+                player.position.x -= 0.2;
+            }
+            if (keys.ArrowRight && player.position.x < GAME_WIDTH/2) {
+                player.position.x += 0.2;
+            }
+            if (keys.Space) {
+                shootBullet();
+            }
+        }
+        
+        function updateBullets() {
+            // Update player bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].position.y += 0.3;
+                
+                // Remove bullets that go off screen
+                if (bullets[i].position.y > GAME_HEIGHT) {
+                    scene.remove(bullets[i]);
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for collisions with invaders
+                for (let j = invaders.length - 1; j >= 0; j--) {
+                    if (checkCollision(bullets[i], invaders[j])) {
+                        // Remove bullet
+                        scene.remove(bullets[i]);
+                        bullets.splice(i, 1);
+                        
+                        // Remove invader
+                        scene.remove(invaders[j]);
+                        invaders.splice(j, 1);
+                        
+                        // Increase score
+                        score += 10;
+                        document.getElementById('score').textContent = score;
+                        
+                        // Increase invader speed as they get fewer
+                        invaderSpeed = 0.05 + (1 - invaders.length / 32) * 0.1;
+                        
+                        // Check for win condition
+                        if (invaders.length === 0) {
+                            // Level complete - create new invaders at higher speed
+                            createInvaders();
+                            invaderSpeed *= 1.2;
+                            invaderShootFrequency *= 1.2;
+                        }
+                        
+                        break;
+                    }
+                }
+            }
+            
+            // Update enemy bullets
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                enemyBullets[i].position.y -= 0.2;
+                
+                // Remove bullets that go off screen
+                if (enemyBullets[i].position.y < -1) {
+                    scene.remove(enemyBullets[i]);
+                    enemyBullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for collisions with player
+                if (checkCollision(enemyBullets[i], player)) {
+                    // Remove bullet
+                    scene.remove(enemyBullets[i]);
+                    enemyBullets.splice(i, 1);
+                    
+                    // Reduce lives
+                    lives--;
+                    document.getElementById('lives').textContent = lives;
+                    
+                    // Flash player to indicate hit
+                    playerLight.color.set(0xff0000);
+                    setTimeout(() => {
+                        playerLight.color.set(0x00ff00);
+                    }, 200);
+                    
+                    // Check for game over
+                    if (lives <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+        }
+        
+        function updateInvaders() {
+            if (invaders.length === 0) return;
+            
+            let shouldChangeDirection = false;
+            let shouldMoveDown = false;
+            
+            // Move invaders
+            for (let i = 0; i < invaders.length; i++) {
+                invaders[i].position.x += invaderSpeed * invaderDirection;
+                
+                // Rotate invaders for animation effect
+                invaders[i].rotation.y += 0.02;
+                
+                // Check if any invader has reached the edge
+                if (invaders[i].position.x > GAME_WIDTH/2 || invaders[i].position.x < -GAME_WIDTH/2) {
+                    shouldChangeDirection = true;
+                    shouldMoveDown = true;
+                }
+                
+                // Random chance for invader to shoot
+                if (Math.random() < invaderShootFrequency) {
+                    shootEnemyBullet(invaders[i]);
+                }
+                
+                // Check if invaders have reached the bottom (player's level)
+                if (invaders[i].position.y <= 1) {
+                    gameOver();
+                    return;
+                }
+            }
+            
+            // Change direction and move down if needed
+            if (shouldChangeDirection) {
+                invaderDirection *= -1;
+                
+                if (shouldMoveDown) {
+                    for (let i = 0; i < invaders.length; i++) {
+                        invaders[i].position.y -= invaderDropDistance;
+                    }
+                }
+            }
+        }
+        
+        function checkCollision(obj1, obj2) {
+            const distance = obj1.position.distanceTo(obj2.position);
+            return distance < 1;
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (gameState === 'playing') {
+                updatePlayer();
+                updateBullets();
+                updateInvaders();
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        function handleKeyDown(event) {
+            if (keys.hasOwnProperty(event.code)) {
+                keys[event.code] = true;
+            }
+        }
+        
+        function handleKeyUp(event) {
+            if (keys.hasOwnProperty(event.code)) {
+                keys[event.code] = false;
+            }
+        }
+        
+        function handleResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function startGame() {
+            document.getElementById('startScreen').style.display = 'none';
+            gameState = 'playing';
+        }
+        
+        function gameOver() {
+            gameState = 'gameOver';
+            document.getElementById('gameOver').style.display = 'block';
+        }
+        
+        function restartGame() {
+            // Reset game variables
+            score = 0;
+            lives = 3;
+            invaderDirection = 1;
+            invaderSpeed = 0.05;
+            invaderShootFrequency = 0.005;
+            
+            // Update UI
+            document.getElementById('score').textContent = score;
+            document.getElementById('lives').textContent = lives;
+            document.getElementById('gameOver').style.display = 'none';
+            
+            // Remove all invaders and bullets
+            for (let i = 0; i < invaders.length; i++) {
+                scene.remove(invaders[i]);
+            }
+            invaders = [];
+            
+            for (let i = 0; i < bullets.length; i++) {
+                scene.remove(bullets[i]);
+            }
+            bullets = [];
+            
+            for (let i = 0; i < enemyBullets.length; i++) {
+                scene.remove(enemyBullets[i]);
+            }
+            enemyBullets = [];
+            
+            // Reset player position
+            player.position.set(0, 0, 0);
+            
+            // Create new invaders
+            createInvaders();
+            
+            // Start game
+            gameState = 'playing';
+        }
+        
+        // Initialize the game
+        init();
+    </script>
+</body>
+</html>
