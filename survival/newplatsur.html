@@ -1,0 +1,419 @@
+// These are the key functions to fix the issues:
+
+// 1. Fixed player ground positioning and movement speed
+function handlePlayerMovement(delta) {
+    if (controls && controls.isLocked === true) {
+        // --- Calculate potential movement ---
+        velocity.x -= velocity.x * 10.0 * delta; // Air resistance/damping
+        velocity.z -= velocity.z * 10.0 * delta;
+        velocity.y -= 9.8 * 100.0 * delta; // Gravity (mass approx 100)
+
+        direction.z = Number(moveForward) - Number(moveBackward);
+        direction.x = Number(moveRight) - Number(moveLeft);
+        direction.normalize(); // Ensures consistent speed diagonally
+
+        // Apply player speed setting correctly
+        const currentSpeed = playerSettings.speed * 2.5; // Multiplier to make speed more noticeable
+        
+        let moveX = 0;
+        let moveZ = 0;
+
+        if (moveForward || moveBackward) moveZ = -direction.z * currentSpeed * delta;
+        if (moveLeft || moveRight) moveX = -direction.x * currentSpeed * delta;
+
+        // --- Collision Detection ---
+        const playerPos = controls.getObject().position;
+        
+        // Store proposed changes
+        let deltaX = (-velocity.x * delta) + moveX;
+        let deltaZ = (-velocity.z * delta) + moveZ;
+        let deltaY = velocity.y * delta;
+
+        // Simple AABB collision check BEFORE applying movement
+        const playerBox = new THREE.Box3(
+            new THREE.Vector3(playerPos.x - 0.5 + deltaX, playerPos.y - playerSettings.height + 0.1 + deltaY, playerPos.z - 0.5 + deltaZ), 
+            new THREE.Vector3(playerPos.x + 0.5 + deltaX, playerPos.y + deltaY, playerPos.z + 0.5 + deltaZ)
+        );
+
+        let collisionX = false;
+        let collisionZ = false;
+
+        // Check terrain height at player position
+        const playerGroundHeight = getHeightAtPosition(playerPos.x + deltaX, playerPos.z + deltaZ);
+        
+        collidableObjects.forEach(obj => {
+            if (!obj.userData.boundingBox) { // Ensure bounding box exists
+                obj.updateMatrixWorld(true); // Update if needed
+                if (obj instanceof THREE.Group) {
+                    obj.userData.boundingBox = new THREE.Box3().setFromObject(obj);
+                } else {
+                    obj.geometry.computeBoundingBox();
+                    obj.userData.boundingBox = obj.geometry.boundingBox.clone().applyMatrix4(obj.matrixWorld);
+                }
+            }
+
+            if (playerBox.intersectsBox(obj.userData.boundingBox)) {
+                // More refined check for axis of collision
+                const objectBox = obj.userData.boundingBox;
+                
+                // Check X axis collision
+                const xOnlyBox = new THREE.Box3(
+                    new THREE.Vector3(playerPos.x - 0.5 + deltaX, playerPos.y - playerSettings.height + 0.1, playerPos.z - 0.5),
+                    new THREE.Vector3(playerPos.x + 0.5 + deltaX, playerPos.y, playerPos.z + 0.5)
+                );
+                
+                // Check Z axis collision
+                const zOnlyBox = new THREE.Box3(
+                    new THREE.Vector3(playerPos.x - 0.5, playerPos.y - playerSettings.height + 0.1, playerPos.z - 0.5 + deltaZ),
+                    new THREE.Vector3(playerPos.x + 0.5, playerPos.y, playerPos.z + 0.5 + deltaZ)
+                );
+                
+                if (xOnlyBox.intersectsBox(objectBox)) collisionX = true;
+                if (zOnlyBox.intersectsBox(objectBox)) collisionZ = true;
+            }
+        });
+
+        // Apply movement, preventing it if collision detected
+        if (!collisionX) {
+            controls.moveRight(-velocity.x * delta); // Apply damping part
+            controls.getObject().translateX(moveX);     // Apply input part (relative to look direction)
+        } else {
+            velocity.x = 0; // Stop horizontal velocity on collision
+        }
+
+        if (!collisionZ) {
+            controls.moveForward(-velocity.z * delta); // Apply damping part
+            controls.getObject().translateZ(moveZ);      // Apply input part
+        } else {
+            velocity.z = 0; // Stop forward velocity on collision
+        }
+
+        // --- Vertical Movement & Ground Collision ---
+        controls.getObject().position.y += deltaY;
+
+        // Check if player is below ground height (including terrain)
+        if (controls.getObject().position.y < playerGroundHeight + playerSettings.height) {
+            velocity.y = 0;
+            controls.getObject().position.y = playerGroundHeight + playerSettings.height;
+            canJump = true;
+        }
+    } else if (controls && !controls.isLocked && !inventoryOpen) {
+        // Ensure blocker is visible if game started, controls exist, but are unlocked AND inventory isn't open
+        blocker.style.display = 'block';
+        instructions.style.display = '';
+    }
+}
+
+// 2. Create terrain with hills and valleys
+function createGround() {
+    // Create a larger, more detailed ground plane
+    const groundSize = worldScale;
+    const resolution = 128; // Higher for more detailed terrain
+    const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize, resolution, resolution);
+    
+    // Generate height map
+    const heightMap = [];
+    const terrainRoughness = 15; // Adjust for more or less dramatic hills
+    const waterLevel = -2; // Water level height
+    
+    // Create height map data
+    for (let i = 0; i <= resolution; i++) {
+        heightMap[i] = [];
+        for (let j = 0; j <= resolution; j++) {
+            // Use simplex/perlin noise for more natural terrain
+            // Here we're simulating with simple sine waves
+            const x = i / resolution * 5;
+            const z = j / resolution * 5;
+            
+            // Multiple frequency noise for more natural terrain
+            let height = Math.sin(x * 2) * Math.cos(z * 2) * 5;
+            height += Math.sin(x * 4 + 2.5) * Math.cos(z * 4 + 1.5) * 2.5;
+            height += Math.sin(x * 8 + 5) * Math.cos(z * 8 + 5) * 1.25;
+            
+            // Scale the terrain
+            height *= terrainRoughness;
+            
+            heightMap[i][j] = height;
+        }
+    }
+    
+    // Apply height map to geometry
+    for (let i = 0; i <= resolution; i++) {
+        for (let j = 0; j <= resolution; j++) {
+            const vertexIndex = i * (resolution + 1) + j;
+            groundGeometry.attributes.position.setY(vertexIndex, heightMap[i][j]);
+        }
+    }
+    
+    // Update normals for proper lighting
+    groundGeometry.computeVertexNormals();
+    groundGeometry.rotateX(-Math.PI / 2);
+    
+    // Create terrain material with color gradient based on height
+    const groundMaterial = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.8,
+        metalness: 0.1
+    });
+    
+    // Add vertex colors based on height
+    const count = groundGeometry.attributes.position.count;
+    const colors = new Float32Array(count * 3);
+    
+    for (let i = 0; i <= resolution; i++) {
+        for (let j = 0; j <= resolution; j++) {
+            const vertexIndex = i * (resolution + 1) + j;
+            const colorIndex = vertexIndex * 3;
+            const height = heightMap[i][j];
+            
+            if (height < waterLevel + 1) {
+                // Sandy beach near water
+                colors[colorIndex] = 0.95; // R
+                colors[colorIndex + 1] = 0.9; // G
+                colors[colorIndex + 2] = 0.6; // B
+            } else if (height < 5) {
+                // Grassland green (lowlands)
+                colors[colorIndex] = 0.2 + Math.random() * 0.1;
+                colors[colorIndex + 1] = 0.5 + Math.random() * 0.2;
+                colors[colorIndex + 2] = 0.2 + Math.random() * 0.1;
+            } else if (height < 12) {
+                // Darker green/brown (hills)
+                colors[colorIndex] = 0.3 + Math.random() * 0.1;
+                colors[colorIndex + 1] = 0.4 + Math.random() * 0.1;
+                colors[colorIndex + 2] = 0.2 + Math.random() * 0.05;
+            } else {
+                // Rocky, barren (mountain tops)
+                colors[colorIndex] = 0.5 + Math.random() * 0.1;
+                colors[colorIndex + 1] = 0.5 + Math.random() * 0.1;
+                colors[colorIndex + 2] = 0.5 + Math.random() * 0.1;
+            }
+        }
+    }
+    
+    groundGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    
+    // Create and add the ground
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.receiveShadow = true;
+    scene.add(ground);
+    
+    // Store the height map in a global variable for collision detection
+    window.terrainHeightMap = heightMap;
+    window.terrainResolution = resolution;
+    window.terrainSize = groundSize;
+    
+    // Create water plane
+    const waterGeometry = new THREE.PlaneGeometry(groundSize, groundSize, 1, 1);
+    waterGeometry.rotateX(-Math.PI / 2);
+    const waterMaterial = new THREE.MeshStandardMaterial({
+        color: 0x4682B4,
+        transparent: true,
+        opacity: 0.6,
+        roughness: 0.1,
+        metalness: 0.3
+    });
+    const water = new THREE.Mesh(waterGeometry, waterMaterial);
+    water.position.y = waterLevel;
+    water.receiveShadow = true;
+    scene.add(water);
+    
+    // Add global water level for reference
+    window.waterLevel = waterLevel;
+}
+
+// 3. Helper function to get height at a specific world position
+function getHeightAtPosition(x, z) {
+    if (!window.terrainHeightMap) return 0;
+    
+    // Convert world coordinates to height map indices
+    const halfSize = window.terrainSize / 2;
+    const normalizedX = (x + halfSize) / window.terrainSize;
+    const normalizedZ = (z + halfSize) / window.terrainSize;
+    
+    // Bounds check
+    if (normalizedX < 0 || normalizedX > 1 || normalizedZ < 0 || normalizedZ > 1) {
+        return 0; // Default if out of bounds
+    }
+    
+    // Get height map indices
+    const xIndex = Math.floor(normalizedX * window.terrainResolution);
+    const zIndex = Math.floor(normalizedZ * window.terrainResolution);
+    
+    // Bilinear interpolation for smooth height transitions
+    const x1 = Math.min(xIndex, window.terrainResolution);
+    const x2 = Math.min(x1 + 1, window.terrainResolution);
+    const z1 = Math.min(zIndex, window.terrainResolution);
+    const z2 = Math.min(z1 + 1, window.terrainResolution);
+    
+    // Get exact position within the grid square
+    const xFrac = normalizedX * window.terrainResolution - x1;
+    const zFrac = normalizedZ * window.terrainResolution - z1;
+    
+    // Get heights at each corner
+    const h11 = window.terrainHeightMap[x1] && window.terrainHeightMap[x1][z1] ? window.terrainHeightMap[x1][z1] : 0;
+    const h21 = window.terrainHeightMap[x2] && window.terrainHeightMap[x2][z1] ? window.terrainHeightMap[x2][z1] : 0;
+    const h12 = window.terrainHeightMap[x1] && window.terrainHeightMap[x1][z2] ? window.terrainHeightMap[x1][z2] : 0;
+    const h22 = window.terrainHeightMap[x2] && window.terrainHeightMap[x2][z2] ? window.terrainHeightMap[x2][z2] : 0;
+    
+    // Bilinear interpolation
+    const h1 = h11 * (1 - xFrac) + h21 * xFrac;
+    const h2 = h12 * (1 - xFrac) + h22 * xFrac;
+    const height = h1 * (1 - zFrac) + h2 * zFrac;
+    
+    return height;
+}
+
+// 4. Modify createTrees, createRocks, and other object placement to respect terrain
+function createTrees(count) {
+    const trunkHeight = 5 + Math.random() * 3; // Vary height
+    const leavesHeight = 6 + Math.random() * 4;
+    const trunkRadius = 0.5 + Math.random() * 0.2;
+    const leavesRadius = 2.5 + Math.random();
+
+    const trunkGeometry = new THREE.CylinderGeometry(trunkRadius * 0.8, trunkRadius, trunkHeight, 8);
+    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Saddle Brown
+    const leavesGeometry = new THREE.ConeGeometry(leavesRadius, leavesHeight, 8);
+    const leavesMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 }); // Forest Green
+
+    for (let i = 0; i < count; i++) {
+        const treeGroup = new THREE.Group();
+        const trunk = new THREE.Mesh(trunkGeometry.clone(), trunkMaterial);
+        trunk.position.y = trunkHeight / 2;
+        trunk.castShadow = true;
+        const leaves = new THREE.Mesh(leavesGeometry.clone(), leavesMaterial);
+        leaves.position.y = trunkHeight + leavesHeight / 2 - 1; // Adjust overlap
+        leaves.castShadow = true;
+        treeGroup.add(trunk);
+        treeGroup.add(leaves);
+
+        const radius = worldScale * 0.45;
+        const x = (Math.random() - 0.5) * radius * 2;
+        const z = (Math.random() - 0.5) * radius * 2;
+        
+        // Get terrain height at this position
+        const terrainHeight = getHeightAtPosition(x, z);
+        
+        // Don't place trees underwater
+        if (terrainHeight < window.waterLevel) {
+            i--; // Try again
+            continue;
+        }
+        
+        treeGroup.position.set(x, terrainHeight, z);
+        treeGroup.rotation.y = Math.random() * Math.PI * 2;
+        
+        // Slight tilt based on terrain slope
+        const slopeX = getHeightAtPosition(x + 1, z) - terrainHeight;
+        const slopeZ = getHeightAtPosition(x, z + 1) - terrainHeight;
+        treeGroup.rotation.x = slopeZ * 0.1;
+        treeGroup.rotation.z = -slopeX * 0.1;
+        
+        const scale = 0.8 + Math.random() * 0.4;
+        treeGroup.scale.set(scale, scale, scale);
+
+        // Calculate bounding box for the group FOR COLLISION/INTERACTION
+        const box = new THREE.Box3().setFromObject(treeGroup);
+        treeGroup.userData.boundingBox = box; // Store for collision checks
+
+        scene.add(treeGroup);
+        // Store interactable object data
+        const treeData = {
+            mesh: treeGroup, // Reference the whole group
+            type: 'Tree',
+            data: { health: 100, woodYield: 5 + Math.floor(Math.random() * 5) }
+        };
+        worldObjects.push(treeData);
+        collidableObjects.push(treeGroup); // Add group for collision
+    }
+}
+
+// You'll need to update other object placement functions similarly to respect terrain height
+// Here's an example for rocks:
+function createRocks(count) {
+    const rockGeometry = new THREE.IcosahedronGeometry(1, 0); // Base radius is 1
+    const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.8, flatShading: true });
+
+    for (let i = 0; i < count; i++) {
+        const rock = new THREE.Mesh(rockGeometry.clone(), rockMaterial);
+        const radius = worldScale * 0.48; // Placement radius in the world
+        const scale = 0.5 + Math.random() * 1.5;
+        const scaleYFactor = 0.8 + Math.random() * 0.4; // Store the random part for Y scale
+
+        rock.scale.set(scale, scale * scaleYFactor, scale); // Apply scale
+        rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+
+        const x = (Math.random() - 0.5) * radius * 2;
+        const z = (Math.random() - 0.5) * radius * 2;
+        
+        // Get terrain height at this position
+        const terrainHeight = getHeightAtPosition(x, z);
+        
+        // Don't place rocks underwater (or do, but with a lower probability)
+        if (terrainHeight < window.waterLevel && Math.random() > 0.3) {
+            i--; // Try again
+            continue;
+        }
+        
+        rock.position.set(
+            x,
+            terrainHeight + rock.scale.y * 0.5, // Position on terrain plus half height
+            z
+        );
+        
+        rock.castShadow = true;
+        rock.receiveShadow = true;
+
+        scene.add(rock);
+        const rockData = {
+            mesh: rock,
+            type: 'Rock',
+            data: { health: 100, stoneYield: 3 + Math.floor(Math.random() * 4) }
+        };
+        worldObjects.push(rockData);
+        collidableObjects.push(rock);
+    }
+}
+
+// Add similar updates to:
+// - createBarrels()
+// - createBuildings()
+// - createTallGrass()
+// - createScrapMetal()
+// - createAnimals()
+
+// 5. Update setupSettingsScreen to ensure player speed has better defaults
+function setupSettingsScreen() {
+    settingsForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        playerSettings.speed = parseFloat(document.getElementById('playerSpeed').value);
+        playerSettings.height = parseFloat(document.getElementById('playerHeight').value);
+        // Set initial resources
+        addItemToInventory('Wood', parseInt(document.getElementById('startWood').value));
+        addItemToInventory('Stone', parseInt(document.getElementById('startStone').value));
+        addItemToInventory('Raw Meat', parseInt(document.getElementById('startFood').value)); // Example starting food
+        addItemToInventory('Scrap Metal', parseInt(document.getElementById('startScrap').value));
+
+        // Give starting tools
+        addItemToInventory('Axe', 1);
+        addItemToInventory('Pickaxe', 1);
+        addItemToInventory('Knife', 1); // Assume knife is for hunting
+        addItemToInventory('Canteen', 1); // Holds water - needs state (dirty/clean)
+
+        // Move starting tools to quick bar if possible
+        moveToQuickBar('Axe');
+        moveToQuickBar('Pickaxe');
+        moveToQuickBar('Knife');
+        moveToQuickBar('Canteen');
+
+        settingsScreen.style.display = 'none';
+        blocker.style.display = 'flex'; // Show blocker instructions
+        gameStarted = true;
+        init();
+        animate();
+    });
+    
+    // Update default speeds in the UI to be more meaningful
+    document.getElementById('playerSpeed').min = "2";
+    document.getElementById('playerSpeed').max = "10";
+    document.getElementById('playerSpeed').value = "5";
+}
