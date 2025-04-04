@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zaxxon-Style Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            z-index: 100;
+            display: block;
+        }
+        #score {
+            position: absolute;
+            top: 30px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            z-index: 100;
+            display: block;
+            font-size: 24px;
+        }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: red;
+            font-size: 36px;
+            display: none;
+            z-index: 100;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        #restartButton {
+            padding: 10px 20px;
+            font-size: 20px;
+            margin-top: 20px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            border: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">WASD or Arrow Keys to move. Space to fire.</div>
+    <div id="score">Score: 0</div>
+    <div id="gameOver">
+        Game Over!<br>
+        <button id="restartButton">Restart Game</button>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables
+        let scene, camera, renderer;
+        let playerShip;
+        let obstacles = [];
+        let bullets = [];
+        let enemies = [];
+        let isGameOver = false;
+        let score = 0;
+        let terrainSpeed = 0.5;
+        let terrainSegments = [];
+        let terrainLength = 2000;
+        let terrainWidth = 60;
+        let segmentLength = 100;
+        
+        // Player movement
+        const keys = {
+            a: false, d: false, w: false, s: false,
+            ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false,
+            ' ': false
+        };
+        
+        // Initialize the game
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000033);
+            
+            // Create camera - isometric-like view
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 20, -40);
+            camera.lookAt(0, 0, 50);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            // Create player ship
+            createPlayerShip();
+            
+            // Create initial terrain
+            createTerrain();
+            
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('keydown', onKeyDown);
+            window.addEventListener('keyup', onKeyUp);
+            
+            document.getElementById('restartButton').addEventListener('click', restartGame);
+            
+            // Start game loop
+            animate();
+        }
+        
+        function createPlayerShip() {
+            // Simple spaceship geometry
+            const geometry = new THREE.ConeGeometry(2, 5, 4);
+            geometry.rotateX(Math.PI / 2);
+            
+            const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+            playerShip = new THREE.Mesh(geometry, material);
+            playerShip.position.set(0, 5, -20);
+            scene.add(playerShip);
+            
+            // Add wings
+            const wingGeometry = new THREE.BoxGeometry(6, 0.5, 2);
+            const wingMaterial = new THREE.MeshPhongMaterial({ color: 0x009900 });
+            const leftWing = new THREE.Mesh(wingGeometry, wingMaterial);
+            leftWing.position.set(-2, 0, -1);
+            playerShip.add(leftWing);
+            
+            const rightWing = new THREE.Mesh(wingGeometry, wingMaterial);
+            rightWing.position.set(2, 0, -1);
+            playerShip.add(rightWing);
+        }
+        
+        function createTerrain() {
+            const segmentsCount = Math.ceil(terrainLength / segmentLength);
+            
+            for (let i = 0; i < segmentsCount; i++) {
+                const zPosition = i * segmentLength;
+                
+                // Create floor segment
+                const floorGeometry = new THREE.PlaneGeometry(terrainWidth, segmentLength);
+                const floorMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0x555555, 
+                    wireframe: false,
+                    side: THREE.DoubleSide
+                });
+                const floorSegment = new THREE.Mesh(floorGeometry, floorMaterial);
+                floorSegment.rotation.x = Math.PI / 2;
+                floorSegment.position.set(0, 0, zPosition + segmentLength/2);
+                scene.add(floorSegment);
+                terrainSegments.push(floorSegment);
+                
+                // Add grid lines for Zaxxon style
+                const gridHelper = new THREE.GridHelper(terrainWidth, 10, 0xFFFFFF, 0x404040);
+                gridHelper.position.set(0, 0.1, zPosition + segmentLength/2);
+                scene.add(gridHelper);
+                terrainSegments.push(gridHelper);
+                
+                // Randomly add obstacles and enemies
+                if (Math.random() > 0.7) {
+                    addObstacle(zPosition + Math.random() * segmentLength);
+                }
+                
+                if (Math.random() > 0.8) {
+                    addEnemy(zPosition + Math.random() * segmentLength);
+                }
+            }
+        }
+        
+        function addObstacle(zPosition) {
+            const xPosition = (Math.random() - 0.5) * terrainWidth * 0.8;
+            const height = 5 + Math.random() * 10;
+            
+            const geometry = new THREE.BoxGeometry(5, height, 5);
+            const material = new THREE.MeshLambertMaterial({ color: 0xFF0000 });
+            const obstacle = new THREE.Mesh(geometry, material);
+            
+            obstacle.position.set(xPosition, height/2, zPosition);
+            scene.add(obstacle);
+            
+            obstacles.push({
+                mesh: obstacle,
+                collider: new THREE.Box3().setFromObject(obstacle)
+            });
+        }
+        
+        function addEnemy(zPosition) {
+            const xPosition = (Math.random() - 0.5) * terrainWidth * 0.8;
+            const height = 8 + Math.random() * 4;
+            
+            // Enemy spaceship
+            const geometry = new THREE.ConeGeometry(2, 4, 4);
+            geometry.rotateX(-Math.PI / 2);
+            
+            const material = new THREE.MeshPhongMaterial({ color: 0xff6600 });
+            const enemy = new THREE.Mesh(geometry, material);
+            
+            enemy.position.set(xPosition, height, zPosition);
+            scene.add(enemy);
+            
+            enemies.push({
+                mesh: enemy,
+                collider: new THREE.Box3().setFromObject(enemy)
+            });
+        }
+        
+        function fireBullet() {
+            const bulletGeometry = new THREE.SphereGeometry(0.5, 8, 8);
+            const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            
+            // Position bullet at ship's front
+            bullet.position.copy(playerShip.position);
+            bullet.position.z += 5;
+            
+            scene.add(bullet);
+            
+            bullets.push({
+                mesh: bullet,
+                velocity: new THREE.Vector3(0, 0, 2), // Bullet speed
+                collider: new THREE.Sphere(bullet.position, 0.5)
+            });
+        }
+        
+        function movePlayer() {
+            if (isGameOver) return;
+            
+            // Horizontal movement (left/right)
+            if ((keys.a || keys.ArrowLeft) && playerShip.position.x > -terrainWidth/2 + 5) {
+                playerShip.position.x -= 0.5;
+            }
+            if ((keys.d || keys.ArrowRight) && playerShip.position.x < terrainWidth/2 - 5) {
+                playerShip.position.x += 0.5;
+            }
+            
+            // Vertical movement (up/down)
+            if ((keys.w || keys.ArrowUp) && playerShip.position.y < 20) {
+                playerShip.position.y += 0.3;
+            }
+            if ((keys.s || keys.ArrowDown) && playerShip.position.y > 3) {
+                playerShip.position.y -= 0.3;
+            }
+            
+            // Fire bullet with space bar (with cooldown)
+            if (keys[' '] && !bulletCooldown) {
+                fireBullet();
+                bulletCooldown = true;
+                setTimeout(() => { bulletCooldown = false; }, 300);
+            }
+        }
+        
+        // Check collisions between player and obstacles
+        function checkCollisions() {
+            if (isGameOver) return;
+            
+            const playerCollider = new THREE.Box3().setFromObject(playerShip);
+            
+            // Check collisions with obstacles
+            for (let i = 0; i < obstacles.length; i++) {
+                if (playerCollider.intersectsBox(obstacles[i].collider)) {
+                    gameOver();
+                    return;
+                }
+            }
+            
+            // Check collisions with enemies
+            for (let i = 0; i < enemies.length; i++) {
+                if (playerCollider.intersectsBox(enemies[i].collider)) {
+                    gameOver();
+                    return;
+                }
+            }
+            
+            // Check bullet collisions with enemies
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    if (bullets[i] && enemies[j] && bullets[i].collider.intersectsBox(enemies[j].collider)) {
+                        // Remove enemy and bullet
+                        scene.remove(enemies[j].mesh);
+                        scene.remove(bullets[i].mesh);
+                        enemies.splice(j, 1);
+                        bullets.splice(i, 1);
+                        
+                        // Update score
+                        score += 100;
+                        document.getElementById('score').textContent = 'Score: ' + score;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        function updateTerrain() {
+            // Move terrain segments
+            for (let i = 0; i < terrainSegments.length; i++) {
+                terrainSegments[i].position.z -= terrainSpeed;
+                
+                // If segment is far behind player, move it to front
+                if (terrainSegments[i].position.z < -50) {
+                    terrainSegments[i].position.z += terrainLength;
+                    
+                    // Increase difficulty over time
+                    terrainSpeed += 0.0005;
+                    score += 10;
+                    document.getElementById('score').textContent = 'Score: ' + score;
+                    
+                    // Add new obstacles occasionally
+                    if (Math.random() > 0.7) {
+                        addObstacle(terrainSegments[i].position.z + Math.random() * segmentLength);
+                    }
+                    
+                    // Add new enemies occasionally
+                    if (Math.random() > 0.8) {
+                        addEnemy(terrainSegments[i].position.z + Math.random() * segmentLength);
+                    }
+                }
+            }
+            
+            // Move obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].mesh.position.z -= terrainSpeed;
+                obstacles[i].collider.setFromObject(obstacles[i].mesh);
+                
+                // Remove obstacles that are far behind
+                if (obstacles[i].mesh.position.z < -50) {
+                    scene.remove(obstacles[i].mesh);
+                    obstacles.splice(i, 1);
+                }
+            }
+            
+            // Move enemies
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                enemies[i].mesh.position.z -= terrainSpeed;
+                enemies[i].collider.setFromObject(enemies[i].mesh);
+                
+                // Add some enemy movement
+                enemies[i].mesh.position.x += Math.sin(Date.now() * 0.001 + i) * 0.05;
+                
+                // Remove enemies that are far behind
+                if (enemies[i].mesh.position.z < -50) {
+                    scene.remove(enemies[i].mesh);
+                    enemies.splice(i, 1);
+                }
+            }
+        }
+        
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                // Move bullet forward
+                bullets[i].mesh.position.add(bullets[i].velocity);
+                bullets[i].collider.center.copy(bullets[i].mesh.position);
+                
+                // Remove bullets that go too far
+                if (bullets[i].mesh.position.z > 500) {
+                    scene.remove(bullets[i].mesh);
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+        
+        function gameOver() {
+            isGameOver = true;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+        
+        function restartGame() {
+            // Reset game state
+            isGameOver = false;
+            score = 0;
+            terrainSpeed = 0.5;
+            document.getElementById('score').textContent = 'Score: 0';
+            document.getElementById('gameOver').style.display = 'none';
+            
+            // Remove all objects
+            for (let i = 0; i < obstacles.length; i++) {
+                scene.remove(obstacles[i].mesh);
+            }
+            obstacles = [];
+            
+            for (let i = 0; i < enemies.length; i++) {
+                scene.remove(enemies[i].mesh);
+            }
+            enemies = [];
+            
+            for (let i = 0; i < bullets.length; i++) {
+                scene.remove(bullets[i].mesh);
+            }
+            bullets = [];
+            
+            for (let i = 0; i < terrainSegments.length; i++) {
+                scene.remove(terrainSegments[i]);
+            }
+            terrainSegments = [];
+            
+            // Reset player position
+            playerShip.position.set(0, 5, -20);
+            
+            // Create new terrain
+            createTerrain();
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            movePlayer();
+            updateTerrain();
+            updateBullets();
+            checkCollisions();
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Handle window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Input handling
+        function onKeyDown(event) {
+            if (keys.hasOwnProperty(event.key)) {
+                keys[event.key] = true;
+            }
+        }
+        
+        function onKeyUp(event) {
+            if (keys.hasOwnProperty(event.key)) {
+                keys[event.key] = false;
+            }
+        }
+        
+        // Game variables
+        let bulletCooldown = false;
+        
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
