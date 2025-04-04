@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q*bert Three.js</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 48px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+        #restart-button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 24px;
+            background-color: #ff5500;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Score: <span id="score">0</span> | Level: <span id="level">1</span> | Lives: <span id="lives">3</span></div>
+    <div id="game-over">
+        Game Over!
+        <br>
+        <button id="restart-button">Play Again</button>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables
+        let scene, camera, renderer;
+        let qbert, platform;
+        let cubes = [];
+        let enemies = [];
+        let score = 0;
+        let level = 1;
+        let lives = 3;
+        let gameOver = false;
+        let jumping = false;
+        
+        // Colors
+        const ORIGINAL_COLOR = 0x9966CC;
+        const TARGET_COLOR = 0xFFAA00;
+        const ENEMY_COLORS = [0xFF0000, 0x00FF00];
+        
+        // Platform dimensions
+        const PYRAMID_SIZE = 7; // Number of cubes in bottom row
+        const CUBE_SIZE = 1.0;
+        const CUBE_GAP = 0.05;
+        
+        // Initialize the game
+        function init() {
+            // Reset game state
+            score = 0;
+            level = 1;
+            lives = 3;
+            gameOver = false;
+            cubes = [];
+            enemies = [];
+            updateUI();
+            
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 10, 15);
+            camera.lookAt(0, 0, 0);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0x404040, 1);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            // Create pyramid platform
+            createPyramid();
+            
+            // Create Q*bert character
+            createQbert();
+            
+            // Create enemies
+            createEnemies();
+            
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', onKeyDown);
+            
+            document.getElementById('restart-button').addEventListener('click', function() {
+                document.getElementById('game-over').style.display = 'none';
+                document.body.removeChild(renderer.domElement);
+                init();
+                animate();
+            });
+            
+            // Start animation loop
+            animate();
+        }
+        
+        function createPyramid() {
+            // Create a pyramid of cubes
+            for (let row = 0; row < PYRAMID_SIZE; row++) {
+                for (let col = 0; col <= row; col++) {
+                    // Calculate position based on isometric grid
+                    const x = (col - row/2) * (CUBE_SIZE + CUBE_GAP) * 1.8;
+                    const y = -row * (CUBE_SIZE * 0.8);
+                    const z = (row * 0.5 + col * 0.5) * (CUBE_SIZE + CUBE_GAP) * 1.5;
+                    
+                    const geometry = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+                    const material = new THREE.MeshLambertMaterial({ color: ORIGINAL_COLOR });
+                    const cube = new THREE.Mesh(geometry, material);
+                    
+                    cube.position.set(x, y, z);
+                    cube.userData = {
+                        row: row,
+                        col: col,
+                        completed: false
+                    };
+                    
+                    scene.add(cube);
+                    cubes.push(cube);
+                }
+            }
+            
+            // Set initial position for Q*bert (top cube)
+            platform = cubes[0];
+        }
+        
+        function createQbert() {
+            // Create Q*bert as a sphere with eyes
+            const qbertGroup = new THREE.Group();
+            
+            // Body
+            const bodyGeometry = new THREE.SphereGeometry(0.4, 32, 32);
+            const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xFFA500 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            qbertGroup.add(body);
+            
+            // Eyes
+            const eyeGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+            const eyeMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+            
+            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            leftEye.position.set(0.2, 0.15, 0.3);
+            qbertGroup.add(leftEye);
+            
+            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            rightEye.position.set(-0.2, 0.15, 0.3);
+            qbertGroup.add(rightEye);
+            
+            // Pupils
+            const pupilGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+            const pupilMaterial = new THREE.MeshLambertMaterial({ color: 0x000000 });
+            
+            const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+            leftPupil.position.set(0.22, 0.15, 0.38);
+            qbertGroup.add(leftPupil);
+            
+            const rightPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+            rightPupil.position.set(-0.22, 0.15, 0.38);
+            qbertGroup.add(rightPupil);
+            
+            // Nose/snout
+            const noseGeometry = new THREE.ConeGeometry(0.2, 0.4, 32);
+            const noseMaterial = new THREE.MeshLambertMaterial({ color: 0xDDA0DD });
+            const nose = new THREE.Mesh(noseGeometry, noseMaterial);
+            nose.rotation.x = Math.PI / 2;
+            nose.position.set(0, -0.1, 0.4);
+            qbertGroup.add(nose);
+            
+            // Position Q*bert on the top cube
+            qbertGroup.position.copy(platform.position);
+            qbertGroup.position.y += CUBE_SIZE / 2 + 0.4; // Place on top of the cube
+            
+            scene.add(qbertGroup);
+            qbert = qbertGroup;
+        }
+        
+        function createEnemies() {
+            // Create some basic enemies
+            if (enemies.length > 0) {
+                enemies.forEach(enemy => scene.remove(enemy));
+                enemies = [];
+            }
+            
+            const numEnemies = level;
+            
+            for (let i = 0; i < numEnemies; i++) {
+                // Place enemy on a random cube near the bottom
+                const startRow = Math.max(PYRAMID_SIZE - 3, 0);
+                const randomRowIndex = startRow + Math.floor(Math.random() * 3);
+                const rowStartIndex = (randomRowIndex * (randomRowIndex + 1)) / 2;
+                const randomColIndex = Math.floor(Math.random() * (randomRowIndex + 1));
+                const cubeIndex = rowStartIndex + randomColIndex;
+                
+                const startCube = cubes[Math.min(cubeIndex, cubes.length - 1)];
+                
+                const enemyGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+                const enemyMaterial = new THREE.MeshLambertMaterial({ 
+                    color: ENEMY_COLORS[i % ENEMY_COLORS.length]
+                });
+                
+                const enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
+                enemy.position.copy(startCube.position);
+                enemy.position.y += CUBE_SIZE / 2 + 0.3;
+                
+                enemy.userData = {
+                    currentCube: startCube,
+                    moveTimer: 0,
+                    moveDelay: 2.5 - (level * 0.3), // Enemies move faster as levels increase
+                    type: i % 2 // Different enemy types for different movement patterns
+                };
+                
+                scene.add(enemy);
+                enemies.push(enemy);
+            }
+        }
+        
+        function moveQbert(direction) {
+            if (jumping || gameOver) return;
+            
+            let targetCube = null;
+            const currentRow = platform.userData.row;
+            const currentCol = platform.userData.col;
+            
+            // Calculate target cube based on direction
+            switch (direction) {
+                case 'up-right':
+                    if (currentRow > 0) {
+                        const targetRow = currentRow - 1;
+                        const targetCol = currentCol;
+                        targetCube = findCube(targetRow, targetCol);
+                    }
+                    break;
+                case 'up-left':
+                    if (currentRow > 0 && currentCol > 0) {
+                        const targetRow = currentRow - 1;
+                        const targetCol = currentCol - 1;
+                        targetCube = findCube(targetRow, targetCol);
+                    }
+                    break;
+                case 'down-right':
+                    if (currentRow < PYRAMID_SIZE - 1) {
+                        const targetRow = currentRow + 1;
+                        const targetCol = currentCol + 1;
+                        targetCube = findCube(targetRow, targetCol);
+                    }
+                    break;
+                case 'down-left':
+                    if (currentCol < currentRow && currentRow < PYRAMID_SIZE - 1) {
+                        const targetRow = currentRow + 1;
+                        const targetCol = currentCol;
+                        targetCube = findCube(targetRow, targetCol);
+                    }
+                    break;
+            }
+            
+            if (targetCube) {
+                jumping = true;
+                
+                // Change current cube's color if not already changed
+                if (!platform.userData.completed) {
+                    platform.material.color.setHex(TARGET_COLOR);
+                    platform.userData.completed = true;
+                    score += 25;
+                    updateUI();
+                    checkLevelComplete();
+                }
+                
+                // Animate jump
+                const startPosition = qbert.position.clone();
+                const endPosition = targetCube.position.clone();
+                endPosition.y += CUBE_SIZE / 2 + 0.4; // Place on top of the target cube
+                
+                const midPosition = startPosition.clone().add(endPosition).multiplyScalar(0.5);
+                midPosition.y += 1.5; // Add some height to the jump
+                
+                const jumpDuration = 0.5; // in seconds
+                const startTime = performance.now();
+                
+                function animateJump() {
+                    const elapsed = (performance.now() - startTime) / 1000; // Convert to seconds
+                    const t = Math.min(elapsed / jumpDuration, 1);
+                    
+                    // Quadratic Bezier curve for smooth arc jump
+                    if (t < 1) {
+                        const mt = 1 - t;
+                        const tt = t * t;
+                        const mtt = mt * t * 2;
+                        
+                        qbert.position.x = mt * mt * startPosition.x + mtt * midPosition.x + tt * endPosition.x;
+                        qbert.position.y = mt * mt * startPosition.y + mtt * midPosition.y + tt * endPosition.y;
+                        qbert.position.z = mt * mt * startPosition.z + mtt * midPosition.z + tt * endPosition.z;
+                        
+                        requestAnimationFrame(animateJump);
+                    } else {
+                        // Jump completed
+                        qbert.position.copy(endPosition);
+                        platform = targetCube;
+                        jumping = false;
+                        
+                        // Check if Q*bert fell off the pyramid
+                        if (platform.userData.row === PYRAMID_SIZE - 1) {
+                            loseLife();
+                            if (!gameOver) {
+                                // Reset Q*bert position
+                                qbert.position.copy(cubes[0].position);
+                                qbert.position.y += CUBE_SIZE / 2 + 0.4;
+                                platform = cubes[0];
+                            }
+                        }
+                        
+                        checkCollisions();
+                    }
+                }
+                
+                animateJump();
+            }
+        }
+        
+        function moveEnemies(delta) {
+            enemies.forEach(enemy => {
+                enemy.userData.moveTimer += delta;
+                
+                if (enemy.userData.moveTimer >= enemy.userData.moveDelay) {
+                    enemy.userData.moveTimer = 0;
+                    
+                    const currentCube = enemy.userData.currentCube;
+                    const row = currentCube.userData.row;
+                    const col = currentCube.userData.col;
+                    
+                    let possibleMoves = [];
+                    
+                    // Type 0 enemy: moves randomly in all directions
+                    if (enemy.userData.type === 0) {
+                        // Up-right
+                        if (row > 0) {
+                            possibleMoves.push({row: row - 1, col: col});
+                        }
+                        // Up-left
+                        if (row > 0 && col > 0) {
+                            possibleMoves.push({row: row - 1, col: col - 1});
+                        }
+                        // Down-right
+                        if (row < PYRAMID_SIZE - 1) {
+                            possibleMoves.push({row: row + 1, col: col + 1});
+                        }
+                        // Down-left
+                        if (col < row && row < PYRAMID_SIZE - 1) {
+                            possibleMoves.push({row: row + 1, col: col});
+                        }
+                    } 
+                    // Type 1 enemy: tends to move toward Q*bert
+                    else if (enemy.userData.type === 1) {
+                        const qbertRow = platform.userData.row;
+                        const qbertCol = platform.userData.col;
+                        
+                        // Determine direction to move toward Q*bert
+                        if (row > qbertRow) {
+                            // Move up
+                            if (col > qbertCol) {
+                                possibleMoves.push({row: row - 1, col: col - 1}); // Up-left
+                            } else {
+                                possibleMoves.push({row: row - 1, col: col}); // Up-right
+                            }
+                        } else if (row < qbertRow) {
+                            // Move down
+                            if (col < qbertCol) {
+                                possibleMoves.push({row: row + 1, col: col + 1}); // Down-right
+                            } else {
+                                possibleMoves.push({row: row + 1, col: col}); // Down-left
+                            }
+                        } else {
+                            // Random movement on same row
+                            if (col > 0) {
+                                possibleMoves.push({row: row, col: col - 1});
+                            }
+                            if (col < row) {
+                                possibleMoves.push({row: row, col: col + 1});
+                            }
+                        }
+                        
+                        // Add some randomness
+                        if (Math.random() < 0.3) {
+                            if (row > 0) {
+                                possibleMoves.push({row: row - 1, col: Math.min(col, row - 1)});
+                            }
+                            if (row < PYRAMID_SIZE - 1) {
+                                possibleMoves.push({row: row + 1, col: Math.min(col + 1, row + 1)});
+                            }
+                        }
+                    }
+                    
+                    // Select a random move from possible moves
+                    if (possibleMoves.length > 0) {
+                        const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                        const targetCube = findCube(randomMove.row, randomMove.col);
+                        
+                        if (targetCube) {
+                            // Animate enemy movement
+                            const startPosition = enemy.position.clone();
+                            const endPosition = targetCube.position.clone();
+                            endPosition.y += CUBE_SIZE / 2 + 0.3;
+                            
+                            const midPosition = startPosition.clone().add(endPosition).multiplyScalar(0.5);
+                            midPosition.y += 0.8;
+                            
+                            const jumpDuration = 0.4;
+                            const startTime = performance.now();
+                            
+                            function animateEnemyJump() {
+                                const elapsed = (performance.now() - startTime) / 1000;
+                                const t = Math.min(elapsed / jumpDuration, 1);
+                                
+                                if (t < 1) {
+                                    const mt = 1 - t;
+                                    const tt = t * t;
+                                    const mtt = mt * t * 2;
+                                    
+                                    enemy.position.x = mt * mt * startPosition.x + mtt * midPosition.x + tt * endPosition.x;
+                                    enemy.position.y = mt * mt * startPosition.y + mtt * midPosition.y + tt * endPosition.y;
+                                    enemy.position.z = mt * mt * startPosition.z + mtt * midPosition.z + tt * endPosition.z;
+                                    
+                                    requestAnimationFrame(animateEnemyJump);
+                                } else {
+                                    enemy.position.copy(endPosition);
+                                    enemy.userData.currentCube = targetCube;
+                                    
+                                    // Check if enemy fell off the pyramid
+                                    if (targetCube.userData.row === PYRAMID_SIZE - 1) {
+                                        scene.remove(enemy);
+                                        enemies.splice(enemies.indexOf(enemy), 1);
+                                        
+                                        // Spawn a new enemy after a delay
+                                        setTimeout(() => {
+                                            if (!gameOver) createEnemies();
+                                        }, 3000);
+                                    }
+                                    
+                                    checkCollisions();
+                                }
+                            }
+                            
+                            animateEnemyJump();
+                        }
+                    }
+                }
+            });
+        }
+        
+        function findCube(row, col) {
+            return cubes.find(cube => cube.userData.row === row && cube.userData.col === col);
+        }
+        
+        function checkCollisions() {
+            if (gameOver) return;
+            
+            enemies.forEach(enemy => {
+                const distance = enemy.position.distanceTo(qbert.position);
+                if (distance < 0.8) {
+                    loseLife();
+                    if (!gameOver) {
+                        // Reset Q*bert position
+                        qbert.position.copy(cubes[0].position);
+                        qbert.position.y += CUBE_SIZE / 2 + 0.4;
+                        platform = cubes[0];
+                    }
+                }
+            });
+        }
+        
+        function loseLife() {
+            lives--;
+            updateUI();
+            
+            if (lives <= 0) {
+                gameOver = true;
+                document.getElementById('game-over').style.display = 'block';
+            }
+        }
+        
+        function checkLevelComplete() {
+            const allCompleted = cubes.every(cube => cube.userData.completed);
+            
+            if (allCompleted) {
+                level++;
+                updateUI();
+                
+                // Reset cubes to original color
+                cubes.forEach(cube => {
+                    cube.material.color.setHex(ORIGINAL_COLOR);
+                    cube.userData.completed = false;
+                });
+                
+                // Reset Q*bert position
+                qbert.position.copy(cubes[0].position);
+                qbert.position.y += CUBE_SIZE / 2 + 0.4;
+                platform = cubes[0];
+                
+                // Create new enemies for the next level
+                createEnemies();
+            }
+        }
+        
+        function updateUI() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('level').textContent = level;
+            document.getElementById('lives').textContent = lives;
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function onKeyDown(event) {
+            switch(event.key) {
+                case 'ArrowUp':
+                    moveQbert('up-right');
+                    break;
+                case 'ArrowLeft':
+                    moveQbert('up-left');
+                    break;
+                case 'ArrowDown':
+                    moveQbert('down-left');
+                    break;
+                case 'ArrowRight':
+                    moveQbert('down-right');
+                    break;
+            }
+        }
+        
+        function animate() {
+            if (gameOver) return;
+            
+            requestAnimationFrame(animate);
+            
+            const delta = 1/60; // Approximately 60 FPS
+            
+            // Move enemies
+            moveEnemies(delta);
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
