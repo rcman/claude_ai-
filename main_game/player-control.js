@@ -25,8 +25,8 @@ const PlayerController = (function() {
             if (!controls || !controls.isLocked || InventorySystem.inventoryOpen) return;
             
             // --- Calculate potential movement ---
-            velocity.x -= velocity.x * 10.0 * delta; // Air resistance/damping
-            velocity.z -= velocity.z * 10.0 * delta;
+            velocity.x -= velocity.x * 2.0 * delta; // Air resistance/damping
+            velocity.z -= velocity.z * 2.0 * delta;
             velocity.y -= 9.8 * 100.0 * delta; // Gravity (mass approx 100)
 
             direction.z = Number(InputHandler.moveForward) - Number(InputHandler.moveBackward);
@@ -35,10 +35,10 @@ const PlayerController = (function() {
 
             // Apply movement forces
             const speedMultiplier = GameState.playerSettings.speed;
-            if (direction.z > 0) velocity.z += direction.z * 400.0 * delta * speedMultiplier;
-            if (direction.z < 0) velocity.z += direction.z * 400.0 * delta * speedMultiplier;
-            if (direction.x > 0) velocity.x += direction.x * 400.0 * delta * speedMultiplier;
-            if (direction.x < 0) velocity.x += direction.x * 400.0 * delta * speedMultiplier;
+            if (direction.z > 0) velocity.z += direction.z * 40.0 * delta * speedMultiplier;
+            if (direction.z < 0) velocity.z += direction.z * 40.0 * delta * speedMultiplier;
+            if (direction.x > 0) velocity.x += direction.x * 40.0 * delta * speedMultiplier;
+            if (direction.x < 0) velocity.x += direction.x * 40.0 * delta * speedMultiplier;
             
             // Get current position
             const playerPos = controls.getObject().position;

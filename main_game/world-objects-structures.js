@@ -117,38 +117,33 @@ if (typeof WorldObjects === 'undefined') {
                 // Add barrel to scene
                 scene.add(barrel);
                 
-                // Add to interactive objects
-                barrel.userData.type = 'barrel';
-                barrel.userData.interactable = true;
-                barrel.userData.containsItems = true;
-                barrel.userData.itemList = [];
-                
-                // Generate random loot
+                // Generate random loot for barrel data
+                const itemList = [];
                 if (Math.random() < 0.7) { // 70% chance to have items
                     const itemCount = Math.floor(Math.random() * 3) + 1; // 1-3 items
                     for (let i = 0; i < itemCount; i++) {
                         // Add random items that make sense for a barrel
                         const itemRoll = Math.random();
                         if (itemRoll < 0.4) {
-                            barrel.userData.itemList.push({
+                            itemList.push({
                                 id: 'scrap',
                                 name: 'Scrap Metal',
                                 quantity: Math.floor(Math.random() * 3) + 1
                             });
                         } else if (itemRoll < 0.7) {
-                            barrel.userData.itemList.push({
+                            itemList.push({
                                 id: 'rope',
                                 name: 'Rope',
                                 quantity: 1
                             });
                         } else if (itemRoll < 0.9) {
-                            barrel.userData.itemList.push({
+                            itemList.push({
                                 id: 'cloth',
                                 name: 'Cloth',
                                 quantity: Math.floor(Math.random() * 2) + 1
                             });
                         } else {
-                            barrel.userData.itemList.push({
+                            itemList.push({
                                 id: 'tool',
                                 name: 'Old Tool',
                                 quantity: 1
@@ -157,13 +152,29 @@ if (typeof WorldObjects === 'undefined') {
                     }
                 }
                 
-                // Add interaction prompt
+                // Create a world object entry
+                const barrelObj = {
+                    mesh: barrel,
+                    type: 'barrel',
+                    data: {
+                        searched: false,
+                        itemList: itemList
+                    },
+                    collidable: true
+                };
+                
+                // Add barrel object info directly to the barrel userData for consistency
+                barrel.userData.type = 'barrel';
+                barrel.userData.interactable = true;
                 barrel.userData.interactionPrompt = "Press E to search";
                 
                 // Register for interaction
                 if (typeof InteractionSystem !== 'undefined' && InteractionSystem.registerInteractiveObject) {
                     InteractionSystem.registerInteractiveObject(barrel);
                 }
+                
+                // Add to world objects collection
+                this.addWorldObject(barrelObj);
                 
                 // Barrel successfully placed
                 placedBarrels++;
@@ -370,8 +381,7 @@ if (typeof WorldObjects === 'undefined') {
                 doorMaterial
             );
             door.position.set(0, 1, depth/2 + 0.01);
-            door.userData.interactable = true;
-            door.userData.type = 'door';
+            door.userData.type = 'door'; // Lowercase for consistency 
             door.userData.state = 'closed';
             door.userData.interactionPrompt = "Press E to open door";
             cabin.add(door);
@@ -394,6 +404,30 @@ if (typeof WorldObjects === 'undefined') {
             
             // Add cabin to scene
             scene.add(cabin);
+            
+            // Create cabin objects for world objects collection
+            const cabinObj = {
+                mesh: cabin,
+                type: 'cabin',
+                data: {},
+                collidable: true
+            };
+            
+            // Add the cabin to world objects
+            this.addWorldObject(cabinObj);
+            
+            // Create door object for world objects collection
+            const doorObj = {
+                mesh: door,
+                type: 'door',
+                data: {
+                    state: 'closed'
+                },
+                collidable: false
+            };
+            
+            // Add the door to world objects
+            this.addWorldObject(doorObj);
             
             // Make door interactive
             if (typeof InteractionSystem !== 'undefined' && InteractionSystem.registerInteractiveObject) {

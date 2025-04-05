@@ -83,7 +83,7 @@ const InteractionSystem = (function() {
 
                     if (worldObjectData && promptElement) {
                         // Don't show prompt for already searched containers
-                        if ((worldObjectData.type === 'Barrel' || worldObjectData.type === 'Crate') && 
+                        if ((worldObjectData.type === 'barrel' || worldObjectData.type === 'crate') && 
                             worldObjectData.data && worldObjectData.data.searched) {
                             // Skip prompt for searched containers
                         } else {
@@ -104,18 +104,22 @@ const InteractionSystem = (function() {
         
         // Get verb based on object type
         getInteractionVerb: function(type) {
-            switch (type) {
-                case 'Tree': return 'Chop';
-                case 'Rock': return 'Mine';
-                case 'Tall Grass': return 'Harvest';
-                case 'Scrap Metal': return 'Collect';
-                case 'Barrel': return 'Search';
-                case 'Crate': return 'Search';
-                case 'Animal': return 'Hunt'; // Needs knife/weapon
-                case 'Water': return 'Collect Water'; // Needs canteen
-                case 'Campfire': return 'Use';
-                case 'Forge': return 'Use';
-                case 'Crafting Table': return 'Use';
+            switch (type.toLowerCase()) {
+                case 'tree': return 'Chop';
+                case 'rock': return 'Mine';
+                case 'tall grass': 
+                case 'tallgrass': return 'Harvest';
+                case 'scrap metal': 
+                case 'scrapmetal': return 'Collect';
+                case 'barrel': return 'Search';
+                case 'crate': return 'Search';
+                case 'animal': return 'Hunt'; // Needs knife/weapon
+                case 'water': return 'Collect Water'; // Needs canteen
+                case 'campfire': return 'Use';
+                case 'forge': return 'Use';
+                case 'crafting table': 
+                case 'craftingtable': return 'Use';
+                case 'berrybush': return 'Gather'; 
                 default: return 'Interact';
             }
         },
@@ -125,17 +129,17 @@ const InteractionSystem = (function() {
             if (!INTERSECTED || InventorySystem.inventoryOpen) return;
 
             const obj = INTERSECTED;
-            const type = obj.type;
+            const type = obj.type.toLowerCase(); // Normalize to lowercase for consistent comparison
             const data = obj.data || {};
             const equippedItem = InventorySystem.getEquippedItem();
 
             if (typeof UIMessages !== 'undefined' && UIMessages.logMessage) {
-                UIMessages.logMessage(`Interacting with ${type}`);
+                UIMessages.logMessage(`Interacting with ${obj.type}`);
             }
 
             switch (type) {
-                case 'Tree':
-                    if (equippedItem === 'Axe') {
+                case 'tree':
+                    if (equippedItem === 'axe') {
                         // Calculate damage based on tool quality
                         const damage = 25;
                         data.health -= damage;
@@ -155,7 +159,7 @@ const InteractionSystem = (function() {
                             const partialYield = Math.floor(data.woodYield * 0.3);
                             if (partialYield > 0) {
                                 UIMessages.logMessage(`Got ${partialYield} wood from the tree.`);
-                                InventorySystem.addItemToInventory('Wood', partialYield);
+                                InventorySystem.addItemToInventory('wood', partialYield);
                                 data.partialResourcesGiven = true;
                             }
                         }
@@ -165,13 +169,13 @@ const InteractionSystem = (function() {
                         if (data.health <= 0) {
                             // Calculate final yield (slightly randomized)
                             const finalYield = Math.floor(data.woodYield * 0.7);
-                            UIMessages.logMessage(`Tree felled! Gained ${finalYield} Wood.`);
-                            InventorySystem.addItemToInventory('Wood', finalYield);
+                            UIMessages.logMessage(`Tree felled! Gained ${finalYield} wood.`);
+                            InventorySystem.addItemToInventory('wood', finalYield);
                             
                             // Small chance to get additional items
                             if (Math.random() < 0.2) {
                                 UIMessages.logMessage("Found a bird's nest with some feathers!");
-                                InventorySystem.addItemToInventory('Feathers', Math.floor(Math.random() * 3) + 1);
+                                InventorySystem.addItemToInventory('feathers', Math.floor(Math.random() * 3) + 1);
                             }
                             
                             WorldObjects.removeWorldObject(obj);
@@ -182,7 +186,7 @@ const InteractionSystem = (function() {
                     break;
                 // Rest of interaction handling code...
                 default:
-                    UIMessages.logMessage(`Cannot interact with ${type} yet.`);
+                    UIMessages.logMessage(`Cannot interact with ${obj.type} yet.`);
             }
             
             // Update UI potentially after interaction
@@ -191,6 +195,17 @@ const InteractionSystem = (function() {
             }
             if (typeof UIInventory !== 'undefined' && UIInventory.updateInventoryUI) {
                 UIInventory.updateInventoryUI();
+            }
+        },
+        
+        // Add registration method for interactive objects
+        registerInteractiveObject: function(object) {
+            // Ensure object has necessary properties
+            if (!object.userData) {
+                object.userData = {};
+            }
+            if (!object.userData.interactable) {
+                object.userData.interactable = true;
             }
         },
         

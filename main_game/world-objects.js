@@ -136,6 +136,11 @@ const WorldObjects = (function() {
         // Add a world object
         addWorldObject: function(object) {
             if (object && object.mesh) {
+                // Ensure type is lowercase for consistency
+                if (object.type) {
+                    object.type = object.type.toLowerCase();
+                }
+                
                 worldObjects.push(object);
                 if (object.collidable) {
                     collidableObjects.push(object.mesh);
@@ -155,7 +160,7 @@ const WorldObjects = (function() {
                 }
                 
                 // Remove from animal behavior system if applicable
-                if (object.type === 'Animal' && typeof AnimalBehavior !== 'undefined' && 
+                if (object.type === 'animal' && typeof AnimalBehavior !== 'undefined' && 
                     typeof AnimalBehavior.unregisterAnimal === 'function') {
                     try {
                         AnimalBehavior.unregisterAnimal(object.mesh);

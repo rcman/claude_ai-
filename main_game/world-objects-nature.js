@@ -11,11 +11,11 @@ if (typeof WorldObjects === 'undefined') {
     // Add nature object creation methods to WorldObjects
     
     // Create trees and add to scene
-    WorldObjects.createTrees = function(scene, worldScale, count = 200) { // Increased default count
+    WorldObjects.createTrees = function(scene, worldScale, count = 9000) { // Increased default count
         // Wait until terrain is fully initialized
         if (!WorldGenerator.isTerrainInitialized()) {
             console.warn("Attempted to create trees before terrain initialization");
-            setTimeout(() => this.createTrees(scene, worldScale, count), 200);
+            setTimeout(() => this.createTrees(scene, worldScale, count), 2000);
             return;
         }
         
@@ -184,16 +184,31 @@ if (typeof WorldObjects === 'undefined') {
                 scene.add(tree);
                 
                 // Add to interactive objects
-                tree.userData.type = 'tree';
+                tree.userData.type = 'tree'; // lowercase for consistency
                 tree.userData.interactable = true;
                 tree.userData.interactionPrompt = "Press E to harvest wood";
-                tree.userData.resourceType = 'wood';
+                tree.userData.resourceType = 'wood'; // lowercase for consistency
                 tree.userData.health = 100;
                 
                 // Register for interaction
                 if (typeof InteractionSystem !== 'undefined' && InteractionSystem.registerInteractiveObject) {
                     InteractionSystem.registerInteractiveObject(tree);
                 }
+                
+                // Create a world object entry
+                const treeObj = {
+                    mesh: tree,
+                    type: 'tree',
+                    data: {
+                        health: 100,
+                        woodYield: Math.floor(10 + Math.random() * 6), // 10-15 wood
+                        partialResourcesGiven: false
+                    },
+                    collidable: true
+                };
+                
+                // Add to world objects
+                this.addWorldObject(treeObj);
                 
                 placedTrees++;
             } catch (error) {
@@ -308,16 +323,30 @@ if (typeof WorldObjects === 'undefined') {
                 
                 // Large rocks are interactable
                 if (baseScale > 0.7) {
-                    rock.userData.type = 'rock';
+                    rock.userData.type = 'rock'; // lowercase for consistency
                     rock.userData.interactable = true;
                     rock.userData.interactionPrompt = "Press E to mine stone";
-                    rock.userData.resourceType = 'stone';
+                    rock.userData.resourceType = 'stone'; // already lowercase
                     rock.userData.health = 150;
                     
                     // Register for interaction
                     if (typeof InteractionSystem !== 'undefined' && InteractionSystem.registerInteractiveObject) {
                         InteractionSystem.registerInteractiveObject(rock);
                     }
+                    
+                    // Create a world object entry
+                    const rockObj = {
+                        mesh: rock,
+                        type: 'rock',
+                        data: {
+                            health: 150,
+                            stoneYield: Math.floor(8 + Math.random() * 5) // 8-12 stone
+                        },
+                        collidable: true
+                    };
+                    
+                    // Add to world objects
+                    this.addWorldObject(rockObj);
                 }
                 
                 placedRocks++;
@@ -476,7 +505,7 @@ if (typeof WorldObjects === 'undefined') {
                 
                 // Make berry bushes interactable
                 if (isBerryBush) {
-                    bush.userData.type = 'berryBush';
+                    bush.userData.type = 'berrybush';
                     bush.userData.interactable = true;
                     bush.userData.interactionPrompt = "Press E to gather berries";
                     bush.userData.resourceType = 'berries';
@@ -485,6 +514,19 @@ if (typeof WorldObjects === 'undefined') {
                     if (typeof InteractionSystem !== 'undefined' && InteractionSystem.registerInteractiveObject) {
                         InteractionSystem.registerInteractiveObject(bush);
                     }
+                    
+                    // Create a world object entry
+                    const bushObj = {
+                        mesh: bush,
+                        type: 'berrybush',
+                        data: {
+                            berriesYield: Math.floor(3 + Math.random() * 4) // 3-6 berries
+                        },
+                        collidable: false
+                    };
+                    
+                    // Add to world objects
+                    this.addWorldObject(bushObj);
                 }
                 
                 placedBushes++;
