@@ -1,0 +1,343 @@
+// STANDARDIZATION APPROACH
+// 1. All item/resource names will use Title Case (e.g., "Wood", "Stone")
+// 2. All object types will use lowercase (e.g., "tree", "rock")
+// 3. Add utility functions to normalize case when comparing strings
+
+// crafting-system.js - changes
+// Keep recipe names and ingredients in Title Case, but add case-insensitive checks
+
+// Add this helper function to CraftingSystem
+const CraftingSystemFixes = (function() {
+    return {
+        // This normalizes item names for case-insensitive comparison
+        normalizeItemName: function(itemName) {
+            // Convert first letter of each word to uppercase
+            return itemName.replace(/\b\w/g, l => l.toUpperCase());
+        },
+        
+        // Update canCraftItem to handle case insensitivity
+        canCraftItem: function(recipeName) {
+            // Normalize the recipe name for lookup
+            const normalizedRecipeName = this.normalizeItemName(recipeName);
+            const recipe = this.recipes[normalizedRecipeName];
+            if (!recipe) return false;
+            
+            // Check all ingredients with case-insensitive comparison
+            for (const [name, required] of Object.entries(recipe.ingredients)) {
+                const totalCount = InventorySystem.getTotalItemCount(name);
+                if (totalCount < required) {
+                    return false;
+                }
+            }
+            
+            return true;
+        },
+        
+        // Update craftItem to handle case insensitivity
+        craftItem: function(recipeName) {
+            // Normalize the recipe name for lookup
+            const normalizedRecipeName = this.normalizeItemName(recipeName);
+            const recipe = this.recipes[normalizedRecipeName];
+            if (!recipe) {
+                UIMessages.logMessage(`Unknown recipe: ${recipeName}`, 'error');
+                return;
+            }
+
+            // Check for special requirements (like needing a campfire nearby)
+            if (recipe.requires) {
+                UIMessages.logMessage(`Crafting ${normalizedRecipeName} requires a ${recipe.requires} (not fully implemented).`, 'warning');
+                // Add check here if player is near the required station
+            }
+
+            if (this.consumeResources(recipe.ingredients)) {
+                const outputItem = Object.keys(recipe.output)[0];
+                const outputQuantity = recipe.output[outputItem];
+
+                UIMessages.logMessage(`Crafted ${outputQuantity} ${outputItem}!`, 'success');
+
+                // Try adding to quick bar first
+                let addedToQuickBar = false;
+                for (let i = 0; i < InventorySystem.quickBar.length; i++) {
+                    if (InventorySystem.quickBar[i] === null) {
+                        InventorySystem.quickBar[i] = { name: outputItem, quantity: outputQuantity };
+                        addedToQuickBar = true;
+                        UIQuickbar.updateQuickBarUI();
+                        break;
+                    }
+                }
+
+                // If quick bar is full, add to main inventory
+                if (!addedToQuickBar) {
+                    InventorySystem.addItemToInventory(outputItem, outputQuantity);
+                }
+                
+                UIInventory.updateCraftingUI(); // Update availability after crafting
+            } else {
+                UIMessages.logMessage(`Not enough resources to craft ${normalizedRecipeName}.`, 'error');
+            }
+        }
+    };
+})();
+
+// inventory-system.js - changes
+// Add item name normalization to InventorySystem
+
+const InventorySystemFixes = (function() {
+    return {
+        // This normalizes item names for case-insensitive comparisons
+        normalizeItemName: function(itemName) {
+            if (!itemName) return itemName;
+            // Convert first letter of each word to uppercase
+            return itemName.replace(/\b\w/g, l => l.toUpperCase());
+        },
+        
+        // Update add item to handle case-insensitive comparison
+        addItemToInventory: function(itemName, quantity = 1) {
+            if (!itemName || quantity <= 0) return false;
+            
+            // Normalize the item name
+            const normalizedName = this.normalizeItemName(itemName);
+            
+            this.playerInventory[normalizedName] = (this.playerInventory[normalizedName] || 0) + quantity;
+            UIMessages.logMessage(`+${quantity} ${normalizedName}`, 'success');
+            UIInventory.updateInventoryUI(); // Update display
+            UIInventory.updateCraftingUI(); // Check if new crafts are possible
+            return true;
+        },
+        
+        // Update remove item to handle case-insensitive comparison
+        removeItemFromInventory: function(itemName, quantity = 1) {
+            // Normalize the item name
+            const normalizedName = this.normalizeItemName(itemName);
+            
+            if (!this.playerInventory[normalizedName] || this.playerInventory[normalizedName] < quantity) {
+                return false; // Not enough items
+            }
+            
+            this.playerInventory[normalizedName] -= quantity;
+            if (this.playerInventory[normalizedName] <= 0) {
+                delete this.playerInventory[normalizedName];
+            }
+            
+            UIMessages.logMessage(`-${quantity} ${normalizedName}`, 'removed');
+            UIInventory.updateInventoryUI();
+            UIQuickbar.updateQuickBarUI(); // Item might have been in quickbar
+            UIInventory.updateCraftingUI();
+            return true;
+        },
+        
+        // Update getTotalItemCount to handle case-insensitive comparison
+        getTotalItemCount: function(itemName) {
+            // Normalize the item name
+            const normalizedName = this.normalizeItemName(itemName);
+            
+            let count = this.playerInventory[normalizedName] || 0;
+            this.quickBar.forEach(item => {
+                if (item && this.normalizeItemName(item.name) === normalizedName) {
+                    count += item.quantity;
+                }
+            });
+            return count;
+        }
+    };
+})();
+
+// interaction-system.js - changes
+// Ensure consistent case for interaction verbs and object types
+
+const InteractionSystemFixes = (function() {
+    return {
+        // Update getInteractionVerb to handle consistent casing
+        getInteractionVerb: function(type) {
+            // Always lower case the type for consistency
+            const lowerType = type.toLowerCase();
+            
+            switch (lowerType) {
+                case 'tree': return 'Chop';
+                case 'rock': return 'Mine';
+                case 'tall grass': 
+                case 'tallgrass': return 'Harvest';
+                case 'scrap metal': 
+                case 'scrapmetal': return 'Collect';
+                case 'barrel': return 'Search';
+                case 'crate': return 'Search';
+                case 'animal': return 'Hunt'; // Needs knife/weapon
+                case 'water': return 'Collect Water'; // Needs canteen
+                case 'campfire': return 'Use';
+                case 'forge': return 'Use';
+                case 'crafting table': 
+                case 'craftingtable': return 'Use';
+                case 'berrybush': return 'Gather'; 
+                default: return 'Interact';
+            }
+        },
+        
+        // Update handleInteraction to normalize resource types
+        handleInteraction: function() {
+            if (!INTERSECTED || InventorySystem.inventoryOpen) return;
+
+            const obj = INTERSECTED;
+            const type = obj.type.toLowerCase(); // Normalize to lowercase for consistent comparison
+            const data = obj.data || {};
+            const equippedItem = InventorySystem.getEquippedItem();
+
+            if (typeof UIMessages !== 'undefined' && UIMessages.logMessage) {
+                UIMessages.logMessage(`Interacting with ${obj.type}`);
+            }
+
+            switch (type) {
+                case 'tree':
+                    if (equippedItem === 'Axe') {
+                        // Calculate damage based on tool quality
+                        const damage = 25;
+                        data.health -= damage;
+                        
+                        // Visual feedback
+                        const treeGroup = obj.mesh;
+                        if (treeGroup && data.health <= 75 && data.health > 50) {
+                            // First stage of damage - slightly tilt the tree
+                            treeGroup.rotation.z = Math.random() * 0.05;
+                        } else if (treeGroup && data.health <= 50 && data.health > 25) {
+                            // Second stage - more visible tilt
+                            treeGroup.rotation.z = 0.1 + Math.random() * 0.05;
+                        }
+                        
+                        // Give partial resources before it's completely gone
+                        if (data.health <= 75 && !data.partialResourcesGiven) {
+                            const partialYield = Math.floor(data.woodYield * 0.3);
+                            if (partialYield > 0) {
+                                UIMessages.logMessage(`Got ${partialYield} Wood from the tree.`);
+                                InventorySystem.addItemToInventory('Wood', partialYield);
+                                data.partialResourcesGiven = true;
+                            }
+                        }
+                        
+                        UIMessages.logMessage(`Chopped Tree. Health: ${data.health}`);
+                        
+                        if (data.health <= 0) {
+                            // Calculate final yield (slightly randomized)
+                            const finalYield = Math.floor(data.woodYield * 0.7);
+                            UIMessages.logMessage(`Tree felled! Gained ${finalYield} Wood.`);
+                            InventorySystem.addItemToInventory('Wood', finalYield);
+                            
+                            // Small chance to get additional items
+                            if (Math.random() < 0.2) {
+                                UIMessages.logMessage("Found a bird's nest with some Feathers!");
+                                InventorySystem.addItemToInventory('Feathers', Math.floor(Math.random() * 3) + 1);
+                            }
+                            
+                            WorldObjects.removeWorldObject(obj);
+                        }
+                    } else {
+                        UIMessages.logMessage("Requires an Axe to chop.");
+                    }
+                    break;
+                // Rest of interaction handling code...
+                default:
+                    UIMessages.logMessage(`Cannot interact with ${obj.type} yet.`);
+            }
+            
+            // Update UI potentially after interaction
+            if (typeof UIQuickbar !== 'undefined' && UIQuickbar.updateQuickBarUI) {
+                UIQuickbar.updateQuickBarUI();
+            }
+            if (typeof UIInventory !== 'undefined' && UIInventory.updateInventoryUI) {
+                UIInventory.updateInventoryUI();
+            }
+        }
+    };
+})();
+
+// world-objects-nature.js - changes
+// Ensure consistent case for resource types, particularly capitalize resource types
+
+const WorldObjectsNatureFixes = (function() {
+    // Return only the parts that need changes
+    return {
+        // Fixed createTrees function to use proper capitalization for resource types
+        createTrees: function(scene, worldScale, count = 9000) {
+            // Rest of the function remains the same...
+            
+            // This is the important part: standardize resource names to Title Case
+            // When setting up tree properties, use:
+            tree.userData.type = 'tree'; // lowercase as this is an object type
+            tree.userData.interactable = true;
+            tree.userData.interactionPrompt = "Press E to harvest Wood";
+            tree.userData.resourceType = 'Wood'; // Title Case for resource/item names
+            
+            // When registering a tree object:
+            const treeObj = {
+                mesh: tree,
+                type: 'tree', // lowercase for object type
+                data: {
+                    health: 100,
+                    woodYield: Math.floor(10 + Math.random() * 6), // 10-15 wood
+                    partialResourcesGiven: false
+                },
+                collidable: true
+            };
+            
+            // These changes should be applied to all object types
+        },
+        
+        // Fixed createRocks function to use proper capitalization for resources
+        createRocks: function(scene, worldScale, count = 80) {
+            // Rest of the function remains the same...
+            
+            // For large rocks:
+            rock.userData.type = 'rock'; // lowercase for object type
+            rock.userData.interactable = true;
+            rock.userData.interactionPrompt = "Press E to mine Stone";
+            rock.userData.resourceType = 'Stone'; // Title Case for resource name
+            
+            // When creating a rock object:
+            const rockObj = {
+                mesh: rock,
+                type: 'rock', // lowercase for object type
+                data: {
+                    health: 150,
+                    stoneYield: Math.floor(8 + Math.random() * 5) // 8-12 stone
+                },
+                collidable: true
+            };
+        },
+        
+        // Fixed bushes function for proper capitalization
+        createBushes: function(scene, worldScale, count = 150) {
+            // Rest of the function remains the same...
+            
+            // For berry bushes:
+            bush.userData.type = 'berrybush'; // lowercase for object type
+            bush.userData.interactable = true;
+            bush.userData.interactionPrompt = "Press E to gather Berries";
+            bush.userData.resourceType = 'Berries'; // Title Case for resource name
+            
+            // When creating a bush object:
+            const bushObj = {
+                mesh: bush,
+                type: 'berrybush', // lowercase for object type
+                data: {
+                    berriesYield: Math.floor(3 + Math.random() * 4) // 3-6 berries
+                },
+                collidable: false
+            };
+        }
+    };
+})();
+
+// INTEGRATION GUIDE
+/*
+To properly integrate these fixes:
+
+1. Add the normalizeItemName function to both CraftingSystem and InventorySystem
+2. Replace the original methods with the fixed versions
+3. Update all direct string comparisons to use the normalized versions
+4. Consistently use:
+   - Title Case (first letter capitalized) for all item and resource names
+   - lowercase for all object types
+5. Update all UI messages to show the properly capitalized item names
+6. Update any serialization/deserialization code for saved games to handle the case changes
+
+This standardization will prevent case-sensitivity bugs while maintaining a consistent
+visual appearance in the UI.
+*/

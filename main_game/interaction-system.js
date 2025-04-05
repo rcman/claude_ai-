@@ -139,7 +139,7 @@ const InteractionSystem = (function() {
 
             switch (type) {
                 case 'tree':
-                    if (equippedItem === 'axe') {
+                    if (equippedItem === 'Axe') {
                         // Calculate damage based on tool quality
                         const damage = 25;
                         data.health -= damage;
